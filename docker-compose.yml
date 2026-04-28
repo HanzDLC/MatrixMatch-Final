@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: matrixmatch
+      POSTGRES_USER: matrixmatch
+      POSTGRES_PASSWORD: matrixmatch
+    ports:
+      # Map host 5440 → container 5432.
+      # 5432 is taken by the native postgresql-x64-18 Windows service;
+      # 5433 became stuck in Docker Desktop's port proxy and refused to
+      # release. 5440 sidesteps both.
+      - "5440:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      # Full snapshot restore: on a BRAND NEW volume, Postgres executes this
+      # after 01_schema.sql and 02_users_seed.sql and ends up with the exact
+      # same DB state as this project snapshot.
+      - ./matrixmatch-current-20260427-000705.sql:/docker-entrypoint-initdb.d/99_matrixmatch_snapshot.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matrixmatch -d matrixmatch"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

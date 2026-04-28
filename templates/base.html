@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}MatrixMatch{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+    
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar__left">
+            <a href="{{ url_for('home') }}" class="topbar__brand">
+                Matrix<span>Match</span>
+            </a>
+        </div>
+        <div class="topbar__right">
+            {% if session and session.get('first_name') %}
+                <div class="topbar__user">
+                    {{ session.get('first_name') }} {{ session.get('last_name') }}
+                    <span class="topbar__role">({{ session.get('role') }})</span>
+                </div>
+                <a class="topbar__link" href="{{ url_for('logout') }}">Logout</a>
+            {% else %}
+                <a class="topbar__link" style="margin-right: 0.5rem; background: transparent;" href="{{ url_for('login') }}">Login</a>
+                <a class="topbar__link" style="background-color: var(--color-secondary); color: var(--color-primary);" href="{{ url_for('register') }}">Register</a>
+            {% endif %}
+        </div>
+    </header>
+
+    {% if session and session.get('user_id') %}
+    <div class="layout">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar__section">
+                <div class="sidebar__title">Navigation</div>
+                <a href="{{ url_for('dashboard') }}" class="sidebar__link">
+                    📊 Dashboard
+                </a>
+                {% if session.get('role') != 'Admin' %}
+                <a href="{{ url_for('comparison_new') }}" class="sidebar__link">
+                    🔍 New Comparison
+                </a>
+                <a href="{{ url_for('history') }}" class="sidebar__link">
+                    🕒 View History
+                </a>
+                {% endif %}
+            </div>
+
+            {% if session.get('role') == 'Admin' %}
+                <div class="sidebar__section">
+                    <div class="sidebar__title">Admin</div>
+                    <a href="{{ url_for('manage_researchers') }}" class="sidebar__link">
+                        👥 Manage Users
+                    </a>
+
+                    {#
+                        Documents dropdown. The <details> element is open by
+                        default so admins see the three doc-related pages at a
+                        glance; clicking the summary collapses it. "Manage
+                        Documents" is the first sub-link to match the user's
+                        "default" expectation.
+                    #}
+                    <details class="sidebar__dropdown" open>
+                        <summary>📄 Documents</summary>
+                        <div class="sidebar__dropdown-body">
+                            <a href="{{ url_for('manage_documents') }}" class="sidebar__sublink">
+                                📋 Manage Documents
+                            </a>
+                            <a href="{{ url_for('upload_document') }}" class="sidebar__sublink">
+                                📤 Upload Study
+                            </a>
+                            <a href="{{ url_for('upload_document_experimental') }}" class="sidebar__sublink">
+                                🧪 Upload (Experimental)
+                            </a>
+                        </div>
+                    </details>
+
+                    <a href="{{ url_for('admin_settings') }}" class="sidebar__link">
+                        ⚙️ Settings
+                    </a>
+                </div>
+            {% endif %}
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <div class="page-container">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    {% else %}
+    {#
+        Public Layout (no sidebar) — only for unauthenticated pages.
+        Pages that need a full custom layout (login, register, index) override
+        `public_content` instead; their `content` block stays empty so the
+        wrapper below is hidden by the trim check.
+    #}
+    <main style="flex: 1; display: flex; flex-direction: column;">
+        {% set rendered_content = self.content() %}
+        {% if rendered_content and rendered_content|trim %}
+        <div class="page-container" style="padding: 2rem; max-width: 1200px; margin: 0 auto; width: 100%;">
+            {{ rendered_content }}
+        </div>
+        {% endif %}
+        {% block public_content %}{% endblock %}
+    </main>
+    {% endif %}
+
+    <footer class="site-footer">
+        &copy; 2026 MatrixMatch &middot; ISAT U
+    </footer>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

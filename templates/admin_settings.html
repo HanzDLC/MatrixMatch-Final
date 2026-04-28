@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Admin Settings - MatrixMatch{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Admin Settings</h1>
+        <p style="font-size: 1.05rem; color: var(--text-muted);">
+            Configure the standardized comparison threshold researchers see on the New Comparison page.
+        </p>
+    </div>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">&larr; Back to Dashboard</a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<form method="post"
+      action="{{ url_for('admin_settings') }}"
+      class="form-container"
+      style="max-width: 700px;">
+
+    <div class="form-group">
+        <label for="comparison_threshold" style="display: flex; justify-content: space-between;">
+            <span>Standardized Minimum Threshold <span style="color: var(--color-danger);">*</span></span>
+            <span id="thresholdValue" style="color: var(--color-secondary); font-weight: 700;">{{ comparison_threshold }}%</span>
+        </label>
+        <input type="range"
+               id="comparison_threshold"
+               name="comparison_threshold"
+               min="60" max="100" step="5"
+               value="{{ comparison_threshold }}"
+               style="width: 100%; margin: 10px 0;">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
+            The default similarity cut-off applied to every new comparison. Range 60&ndash;100%, step 5%.
+        </p>
+    </div>
+
+    <div class="form-group" style="margin-top: 2rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox"
+                   name="comparison_slider_enabled"
+                   {% if comparison_slider_enabled %}checked{% endif %}
+                   style="width: auto; margin: 0;">
+            <span>Allow researchers to adjust the threshold slider</span>
+        </label>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem; margin-left: 1.6rem;">
+            When unchecked, researchers see the standardized value above as read-only and cannot drag the slider.
+        </p>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem; margin-top: 2rem;">
+        <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem;">Save Settings</button>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline" style="padding: 0.75rem 1.5rem;">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const slider = document.getElementById('comparison_threshold');
+    const label = document.getElementById('thresholdValue');
+    if (!slider || !label) return;
+    const sync = () => { label.textContent = `${slider.value}%`; };
+    slider.addEventListener('input', sync);
+    slider.addEventListener('change', sync);
+    sync();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Sentence Comparison - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<style>
+.sent-chunk {
+    display: inline;
+    padding: 0.1rem 0.2rem;
+    margin: 0 0.05rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    cursor: default;
+    line-height: 1.8;
+}
+
+.sent-chunk.has-match {
+    background-color: var(--color-warning-bg);
+    border-bottom: 2px solid rgba(245, 158, 11, 0.4);
+}
+.sent-chunk.has-match:hover {
+    cursor: pointer;
+}
+
+.sent-chunk.is-active {
+    background-color: var(--color-warning);
+    border-bottom: 2px solid var(--color-secondary-hover);
+    color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Sentence Comparison</h1>
+        <p style="font-size: 1.1rem;">History #{{ history.history_id }} &bull; Top Match: "{{ repo_doc.title }}"</p>
+    </div>
+    
+    <div style="text-align: right;">
+        <div style="margin-bottom: 0.5rem;">
+            <span class="badge badge-gray">Researcher: {{ history.researcher_name }}</span>
+            <span class="badge badge-blue">Program: {{ repo_doc.academic_program or "N/A" }}</span>
+            {% if top_match.similarity is defined %}
+                <span class="badge badge-gold">Match: {{ (top_match.similarity * 100) | round(2) }}%</span>
+            {% endif %}
+        </div>
+        <a href="{{ url_for('history_detail', history_id=history.history_id) }}" class="btn btn-outline" style="padding: 0.3rem 0.8rem; font-size: 0.85rem;">&larr; Back to Analysis</a>
+    </div>
+</div>
+
+{% if unique_user_features and unique_user_features|length > 0 %}
+<div class="card" style="margin-bottom: 2rem; border-left: 5px solid rgba(16, 185, 129, 1);">
+    <h2 style="color: var(--color-primary); margin-bottom: 0.5rem; font-size: 1.25rem;">
+        🌟 Unique Methodological Features Identified
+    </h2>
+    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+        The NLP engine has automatically scanned both abstracts and determined that your study uniquely explores the following specific techniques, models, or concepts:
+    </p>
+    <div>
+        {% for feature in unique_user_features %}
+            <span style="display: inline-block; background-color: rgba(16, 185, 129, 0.15); color: rgb(10, 135, 90); padding: 0.4rem 0.8rem; border-radius: 20px; font-weight: 600; font-size: 0.9rem; margin-right: 0.5rem; margin-bottom: 0.5rem; border: 1px solid rgba(16, 185, 129, 0.4);">
+                {{ feature }}
+            </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-2 mb-8">
+    <div class="card">
+        <h2 class="card-title" style="color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">User Abstract Original</h2>
+        <p style="color: var(--text-main); font-size: 0.95rem;">
+            {% for s in user_sentences %}
+                <span class="sent-chunk user-sent" data-user-idx="{{ loop.index0 }}">{{ s }}</span>{% if not loop.last %} {% endif %}
+            {% endfor %}
+        </p>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title" style="color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">Repository Abstract</h2>
+        <p style="color: var(--text-main); font-size: 0.95rem;">
+            {% for s in repo_sentences %}
+                <span class="sent-chunk repo-sent" data-repo-idx="{{ loop.index0 }}">{{ s }}</span>{% if not loop.last %} {% endif %}
+            {% endfor %}
+        </p>
+    </div>
+</div>
+
+<div class="card" style="background-color: var(--color-primary); color: var(--text-light); border: none;">
+    <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">💡</div>
+    <p style="margin: 0; line-height: 1.6;">
+        <strong>How to read this analysis:</strong> Sentences highlighted in <span style="background-color: var(--color-warning-bg); color: var(--color-primary); padding: 2px 4px; border-radius: 4px; font-weight: bold;">Gold</span> share conceptual similarities across both documents. Hover over any highlighted sentence to lock focus on its conceptual twin across the panel.
+    </p>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+    const bestMatches = {{ best_matches | tojson | safe }};
+    const userSpans = document.querySelectorAll(".user-sent");
+    const repoSpans = document.querySelectorAll(".repo-sent");
+
+    if (!bestMatches || userSpans.length === 0 || repoSpans.length === 0) return;
+
+    const userToRepo = {};
+    const repoToUsers = {};
+
+    bestMatches.forEach((m) => {
+        const u = m.user_index;
+        const r = m.repo_index;
+        userToRepo[u] = r;
+        if (!repoToUsers[r]) repoToUsers[r] = [];
+        repoToUsers[r].push(u);
+    });
+
+    bestMatches.forEach((m) => {
+        const uSpan = document.querySelector(`.user-sent[data-user-idx="${m.user_index}"]`);
+        const rSpan = document.querySelector(`.repo-sent[data-repo-idx="${m.repo_index}"]`);
+        
+        // Highlight as a related match (ignoring unique sentence logic in favor of KeyBERT Chip UI)
+        if (!m.is_unique) {
+            if (uSpan) uSpan.classList.add("has-match");
+            if (rSpan) rSpan.classList.add("has-match");
+        }
+    });
+
+    function clearActive() {
+        document.querySelectorAll(".sent-chunk.is-active").forEach((el) => el.classList.remove("is-active"));
+    }
+
+    userSpans.forEach((span) => {
+        span.addEventListener("mouseenter", () => {
+            if (!span.classList.contains("has-match")) return;
+
+            const uIdx = parseInt(span.dataset.userIdx, 10);
+            const rIdx = userToRepo[uIdx];
+            clearActive();
+            
+            span.classList.add("is-active");
+            if (typeof rIdx === "number") {
+                const rSpan = document.querySelector(`.repo-sent[data-repo-idx="${rIdx}"]`);
+                if (rSpan) rSpan.classList.add("is-active");
+            }
+        });
+        span.addEventListener("mouseleave", clearActive);
+    });
+
+    repoSpans.forEach((span) => {
+        span.addEventListener("mouseenter", () => {
+            if (!span.classList.contains("has-match")) return;
+
+            const rIdx = parseInt(span.dataset.repoIdx, 10);
+            const userIdxs = repoToUsers[rIdx] || [];
+            clearActive();
+            
+            span.classList.add("is-active");
+            userIdxs.forEach((uIdx) => {
+                const uSpan = document.querySelector(`.user-sent[data-user-idx="${uIdx}"]`);
+                if (uSpan && uSpan.classList.contains("has-match")) {
+                    uSpan.classList.add("is-active");
+                }
+            });
+        });
+        span.addEventListener("mouseleave", clearActive);
+    });
+})();
+</script>
+{% endblock %}

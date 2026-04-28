@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Upload Study (Experimental) - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<style>
+.feature-list-wrapper {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    background-color: var(--color-surface);
+}
+.feature-card {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.6rem;
+    background-color: var(--color-bg);
+}
+.feature-card:last-child { margin-bottom: 0; }
+.feature-card__label {
+    flex: 0 0 30%;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+}
+.feature-card__desc {
+    flex: 1;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+    min-height: 2.5rem;
+    resize: vertical;
+}
+.feature-card__remove {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    align-self: stretch;
+}
+.research-field-other-wrap { margin-top: 0.5rem; }
+
+.analyzing-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.78);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+}
+.analyzing-overlay.is-open { display: flex; }
+.analyzing-card {
+    background: var(--color-surface, #fff);
+    padding: 2.5rem 3rem;
+    border-radius: var(--radius-lg, 12px);
+    text-align: center;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.45);
+    border-top: 4px solid var(--color-secondary);
+}
+.analyzing-spinner {
+    font-size: 3.5rem;
+    display: inline-block;
+    animation: spin 2s linear infinite;
+    margin-bottom: 1rem;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
+            Upload Study
+            <span class="badge badge-gold" style="font-size: 0.7rem; vertical-align: middle; margin-left: 0.5rem;">EXPERIMENTAL</span>
+        </h1>
+        <p style="font-size: 1.05rem; color: var(--text-muted);">
+            Upload a PDF or DOCX of a completed study. An LLM will extract the title, authors,
+            abstract, and key features (with descriptions) for you to review before saving.
+        </p>
+    </div>
+    <a href="{{ url_for('manage_documents') }}" class="btn btn-outline">&larr; Back to Documents</a>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% if stage == "upload" %}
+<div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--color-secondary); background-color: #fffbeb;">
+    <p style="margin: 0; color: #92400e; font-size: 0.95rem; line-height: 1.6;">
+        <strong>Experimental feature.</strong> The extractor makes a single LLM call per file and
+        may miss fields on unusual title pages or low-quality scans. You will get to review and
+        edit every field before anything is saved to the database.
+    </p>
+</div>
+
+<form id="uploadForm"
+      method="post"
+      action="{{ url_for('upload_document_experimental') }}"
+      enctype="multipart/form-data"
+      class="form-container"
+      style="max-width: 800px;">
+
+    <div class="form-group">
+        <label for="study_file">Study file <span style="color: var(--color-danger);">*</span></label>
+        <input id="study_file"
+               name="study_file"
+               type="file"
+               accept=".pdf,.docx"
+               class="form-input"
+               required>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
+            Accepted: <code>.pdf</code>, <code>.docx</code>. The document text is truncated to 40,000 words before the LLM sees it.
+            Extraction usually takes 30&ndash;60 seconds.
+        </p>
+    </div>
+
+    <div style="margin-top: 2rem; display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <a href="{{ url_for('upload_document') }}" class="btn btn-outline" style="padding: 0.75rem 1.5rem;">
+            Use classic upload instead
+        </a>
+        <button id="runExtractBtn" type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">
+            Extract fields &rarr;
+        </button>
+    </div>
+</form>
+
+<div id="analyzingOverlay" class="analyzing-overlay" aria-hidden="true">
+    <div class="analyzing-card" role="status" aria-live="polite">
+        <div class="analyzing-spinner">⚙️</div>
+        <h2 style="margin: 0 0 0.5rem 0; color: var(--color-primary); font-size: 1.4rem;">Reading Your Study</h2>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0;">
+            Parsing the file and asking the AI to extract the title, authors, abstract, and key features with descriptions.
+        </p>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin: 1.5rem 0 0 0;">
+            Please keep this tab open.
+        </p>
+    </div>
+</div>
+
+{% elif stage == "review" %}
+<div class="card" style="margin-bottom: 1.5rem; background-color: #f0f9ff; border-left: 4px solid var(--color-primary);">
+    <p style="margin: 0; color: var(--color-primary); font-size: 0.95rem; line-height: 1.6;">
+        Extracted from <strong>{{ source_filename }}</strong>. Review every field below &mdash;
+        nothing has been saved yet. Fix any mistakes, then click <em>Save Study</em>.
+    </p>
+</div>
+
+{% if extracted.warnings %}
+<div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--color-danger); background-color: #fef2f2;">
+    <strong style="color: #991b1b;">Extractor warnings:</strong>
+    <ul style="margin: 0.5rem 0 0 1.25rem; color: #991b1b; font-size: 0.9rem; line-height: 1.5;">
+        {% for w in extracted.warnings %}
+            <li>{{ w }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ url_for('upload_document_experimental_save') }}"
+      class="form-container"
+      style="max-width: 900px;">
+
+    <input type="hidden" name="staging_token" value="{{ staging_token }}">
+    <input type="hidden" name="staging_ext" value="{{ staging_ext }}">
+    <input type="hidden" name="original_filename" value="{{ source_filename }}">
+
+    <div class="form-group">
+        <label for="title">Title <span style="color: var(--color-danger);">*</span></label>
+        <input id="title"
+               name="title"
+               type="text"
+               class="form-input"
+               value="{{ extracted.title }}"
+               required>
+    </div>
+
+    <div class="grid grid-2" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="authors">Authors <span style="color: var(--color-danger);">*</span></label>
+            <input id="authors"
+                   name="authors"
+                   type="text"
+                   class="form-input"
+                   value="{{ extracted.authors }}"
+                   placeholder="e.g. Juan Dela Cruz, Maria Santos"
+                   required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="research_field">Research Field <span style="color: var(--color-danger);">*</span></label>
+            <select id="research_field" name="research_field" class="form-input" required>
+                <option value="" disabled selected>— Select a field —</option>
+                {% for f in research_fields %}
+                    <option value="{{ f }}">{{ f }}</option>
+                {% endfor %}
+            </select>
+            <div class="research-field-other-wrap" id="research_field_other_wrap" hidden>
+                <input type="text" id="research_field_other" name="research_field_other"
+                       class="form-input" maxlength="80"
+                       placeholder="Specify the field (e.g. Bioinformatics)">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="abstract">Abstract <span style="color: var(--color-danger);">*</span></label>
+        <textarea id="abstract"
+                  name="abstract"
+                  class="form-textarea"
+                  rows="12"
+                  required>{{ extracted.abstract }}</textarea>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
+            This is the text SBERT will score against. Make sure it matches what's in the study.
+        </p>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 2rem;">
+        <label>
+            Key Features <span style="color: var(--color-danger);">*</span>
+            <span style="font-weight: 400; color: var(--text-muted); font-size: 0.8rem;">
+                (AI-suggested. Edit any label or description, remove with &times;, or click "Add feature".)
+            </span>
+        </label>
+        <div class="feature-list-wrapper" id="kf_wrapper">
+            <div id="kf_list"></div>
+            <button type="button" id="kf_add" class="btn btn-outline" style="margin-top: 0.5rem;">
+                + Add feature
+            </button>
+        </div>
+        <input type="hidden" name="key_features" id="kf_hidden" value="[]">
+        <div id="kf_count" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+            0 features added.
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem;">
+        <button type="submit" class="btn btn-primary" style="padding: 1rem 1.5rem; flex: 1;">
+            Save Study
+        </button>
+    </div>
+</form>
+
+<form method="post"
+      action="{{ url_for('upload_document_experimental_cancel') }}"
+      style="margin-top: 0.75rem; max-width: 900px;">
+    <input type="hidden" name="staging_token" value="{{ staging_token }}">
+    <input type="hidden" name="staging_ext" value="{{ staging_ext }}">
+    <button type="submit" class="btn btn-outline" style="padding: 0.75rem 1.5rem; width: 100%;">
+        Cancel &amp; upload a different file
+    </button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if stage == "upload" %}
+<script>
+(function () {
+    const form = document.getElementById('uploadForm');
+    const overlay = document.getElementById('analyzingOverlay');
+    const btn = document.getElementById('runExtractBtn');
+    if (!form || !overlay || !btn) return;
+    form.addEventListener('submit', function () {
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'wait';
+    });
+})();
+</script>
+{% endif %}
+{% if stage == "review" %}
+<script src="{{ url_for('static', filename='js/feature_input.js') }}"></script>
+<script>
+(function () {
+    const fieldSel = document.getElementById('research_field');
+    const otherWrap = document.getElementById('research_field_other_wrap');
+    function syncOther() {
+        if (fieldSel && otherWrap) otherWrap.hidden = fieldSel.value !== 'Others';
+    }
+    if (fieldSel) fieldSel.addEventListener('change', syncOther);
+    syncOther();
+
+    const initial = {{ extracted.key_features|tojson }};
+    const widget = window.initFeatureInput({
+        wrapper: 'kf_wrapper',
+        listEl: 'kf_list',
+        hiddenInput: 'kf_hidden',
+        addBtn: 'kf_add',
+        counterEl: 'kf_count',
+        initial: initial,
+        label: 'feature',
+    });
+
+    // Submit-time guard: at least one complete feature.
+    const form = document.querySelector('form[action="{{ url_for("upload_document_experimental_save") }}"]');
+    if (form && widget) {
+        form.addEventListener('submit', function (e) {
+            if (widget.getFeatures().length < 1) {
+                e.preventDefault();
+                alert('Please add at least one key feature with both a label and description.');
+                widget.focusFirstIncomplete();
+            }
+        });
+    }
+})();
+</script>
+{% endif %}
+{% endblock %}

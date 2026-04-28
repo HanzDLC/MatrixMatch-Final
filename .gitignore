@@ -1,0 +1,69 @@
+# Secrets / env
+.env
+.env.local
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Studies / downloaded research artifacts (>900 MB; far exceeds GitHub limits)
+studies/_downloaded/
+studies/_quarantine/
+studies/_staging/
+
+# Claude Code local settings (personal)
+.claude/
+
+# MS Office lock / temp files
+~$*
+
+# Per-field uploaded study files (large)
+studies/Engineering*/
+studies/Information*/
+studies/Sciences/
+studies/Business*/
+studies/Education/
+studies/Industrial*/
+studies/Arts*/
+studies/Others/
+
+# Concept doc generators (local, regenerable)
+concept_*.py
+concept_*.docx
+append_*.py
+
+# Logs
+*.log
+flask-app.log
+download.log
+
+# Generated SQL snapshots (large; restore from canonical migration)
+matrixmatch-current-*.sql
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Node (if any)
+node_modules/
+
+# Misc temp
+*.tmp
+*.bak
+*.swp
+*.orig
+/tmp/

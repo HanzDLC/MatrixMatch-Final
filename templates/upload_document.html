@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Upload Study - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<style>
+.feature-list-wrapper {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    background-color: var(--color-surface);
+}
+.feature-card {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.6rem;
+    background-color: var(--color-bg);
+}
+.feature-card:last-child { margin-bottom: 0; }
+.feature-card__label {
+    flex: 0 0 30%;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+}
+.feature-card__desc {
+    flex: 1;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+    min-height: 2.5rem;
+    resize: vertical;
+}
+.feature-card__remove {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    align-self: stretch;
+}
+.research-field-other-wrap { margin-top: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Upload New Study</h1>
+    <p style="font-size: 1.1rem;">Contribute empirical data to the MatrixMatch ecosystem.</p>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<form id="uploadStudyForm" method="POST" action="{{ url_for('upload_document') }}" class="form-container" style="max-width: 800px;">
+
+    <div class="form-group">
+        <label for="title">Title <span style="color:red">*</span></label>
+        <input type="text" id="title" name="title" class="form-input" required>
+    </div>
+
+    <div class="grid grid-2" style="gap: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="authors">Authors <span style="color:red">*</span></label>
+            <input type="text" id="authors" name="authors" class="form-input" placeholder="e.g. John Doe, Jane Smith" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="research_field">Research Field <span style="color:red">*</span></label>
+            <select id="research_field" name="research_field" class="form-input" required>
+                <option value="" disabled selected>— Select a field —</option>
+                {% for f in research_fields %}
+                    <option value="{{ f }}">{{ f }}</option>
+                {% endfor %}
+            </select>
+            <div class="research-field-other-wrap" id="research_field_other_wrap" hidden>
+                <input type="text" id="research_field_other" name="research_field_other"
+                       class="form-input" maxlength="80"
+                       placeholder="Specify the field (e.g. Bioinformatics)">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="abstract">Abstract <span style="color:red">*</span></label>
+        <textarea id="abstract" name="abstract" class="form-textarea" rows="6" required></textarea>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 2rem;">
+        <label>
+            Key Features <span style="color:red">*</span>
+            <span style="font-weight: 400; color: var(--text-muted); font-size: 0.8rem;">
+                (Add at least one. Each feature needs a short label and a 1-2 sentence description.)
+            </span>
+        </label>
+        <div class="feature-list-wrapper" id="kf_wrapper">
+            <div id="kf_list"></div>
+            <button type="button" id="kf_add" class="btn btn-outline" style="margin-top: 0.5rem;">
+                + Add feature
+            </button>
+        </div>
+        <input type="hidden" name="key_features" id="kf_hidden" value="[]">
+        <div id="kf_count" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+            0 features added.
+        </div>
+    </div>
+
+    <div style="margin-top: 2rem; display: flex; justify-content: flex-end;">
+        <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1rem;">Upload Study</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/feature_input.js') }}"></script>
+<script>
+(function () {
+    const fieldSel = document.getElementById('research_field');
+    const otherWrap = document.getElementById('research_field_other_wrap');
+    function syncOther() {
+        if (fieldSel && otherWrap) {
+            otherWrap.hidden = fieldSel.value !== 'Others';
+        }
+    }
+    if (fieldSel) fieldSel.addEventListener('change', syncOther);
+    syncOther();
+
+    const widget = window.initFeatureInput({
+        wrapper: 'kf_wrapper',
+        listEl: 'kf_list',
+        hiddenInput: 'kf_hidden',
+        addBtn: 'kf_add',
+        counterEl: 'kf_count',
+        initial: [],
+        label: 'feature',
+    });
+
+    const form = document.getElementById('uploadStudyForm');
+    if (form && widget) {
+        form.addEventListener('submit', function (e) {
+            const features = widget.getFeatures();
+            if (features.length < 1) {
+                e.preventDefault();
+                alert('Please add at least one key feature with a label and description.');
+                widget.focusFirstIncomplete();
+                return;
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

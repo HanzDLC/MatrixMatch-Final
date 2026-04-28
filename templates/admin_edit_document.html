@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% block title %}Edit Document #{{ document.document_id }} - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<style>
+.feature-list-wrapper {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    background-color: var(--color-surface);
+}
+.feature-card {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 0.6rem;
+    background-color: var(--color-bg);
+}
+.feature-card:last-child { margin-bottom: 0; }
+.feature-card__label {
+    flex: 0 0 30%;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+}
+.feature-card__desc {
+    flex: 1;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.9rem;
+    min-height: 2.5rem;
+    resize: vertical;
+}
+.feature-card__remove {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    align-self: stretch;
+}
+.research-field-other-wrap { margin-top: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
+            Edit Document #{{ document.document_id }}
+        </h1>
+        <p style="font-size: 1.05rem; color: var(--text-muted);">Update any field below. Changes save immediately.</p>
+    </div>
+    <a href="{{ url_for('manage_documents') }}" class="btn btn-outline">&larr; Back to Documents</a>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% if reference_count > 0 %}
+<div class="card" style="margin-bottom: 1.5rem; border-left: 4px solid var(--color-secondary); background-color: #fffbeb;">
+    <p style="margin: 0; color: #92400e; font-size: 0.95rem; line-height: 1.6;">
+        <strong>Heads up:</strong> This document is referenced by
+        <strong>{{ reference_count }}</strong> past comparison run{{ '' if reference_count == 1 else 's' }}.
+        Editing the abstract <strong>will not retroactively update those runs</strong> &mdash; their similarity scores
+        and feature matrices were computed against the old text and will continue to display as they were.
+        Researchers can hit the <em>Recalculate</em> button on any old history page to re-score it against the new abstract.
+    </p>
+</div>
+{% endif %}
+
+{% if document.source_file_path %}
+<div class="card" style="margin-bottom: 1.5rem; background-color: #f0f9ff; border-left: 4px solid var(--color-primary);">
+    <p style="margin: 0; color: var(--color-primary); font-size: 0.95rem;">
+        Original file archived:
+        <a href="{{ url_for('admin_download_source_file', document_id=document.document_id) }}"
+           class="btn btn-outline" style="margin-left: 0.5rem; padding: 0.3rem 0.7rem; font-size: 0.85rem;">
+            Download original file
+        </a>
+    </p>
+</div>
+{% endif %}
+
+<form method="post"
+      action="{{ url_for('admin_edit_document', document_id=document.document_id) }}"
+      class="form-container"
+      style="max-width: 900px;">
+
+    <div class="form-group">
+        <label for="title">Title <span style="color: var(--color-danger);">*</span></label>
+        <input id="title"
+               name="title"
+               type="text"
+               class="form-input"
+               value="{{ document.title }}"
+               required>
+    </div>
+
+    <div class="form-group mt-4">
+        <label for="authors">Authors</label>
+        <input id="authors"
+               name="authors"
+               type="text"
+               class="form-input"
+               value="{{ document.authors or '' }}"
+               placeholder="e.g. Juan Dela Cruz, Maria Santos">
+    </div>
+
+    <div class="form-group mt-4">
+        <label for="research_field">Research Field <span style="color: var(--color-danger);">*</span></label>
+        <select id="research_field" name="research_field" class="form-input" required>
+            <option value="" disabled {% if not document.research_field %}selected{% endif %}>— Select a field —</option>
+            {% for f in research_fields %}
+                <option value="{{ f }}" {% if document.research_field == f %}selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+        </select>
+        <div class="research-field-other-wrap" id="research_field_other_wrap"
+             {% if document.research_field != 'Others' %}hidden{% endif %}>
+            <input type="text" id="research_field_other" name="research_field_other"
+                   class="form-input" maxlength="80"
+                   value="{{ document.research_field_other or '' }}"
+                   placeholder="Specify the field (e.g. Bioinformatics)">
+        </div>
+    </div>
+
+    <div class="form-group mt-4">
+        <label for="abstract">Abstract <span style="color: var(--color-danger);">*</span></label>
+        <textarea id="abstract"
+                  name="abstract"
+                  class="form-textarea"
+                  rows="12"
+                  required>{{ document.abstract }}</textarea>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.4rem;">
+            The abstract is the field SBERT scores against. Changes affect future comparisons immediately.
+        </p>
+    </div>
+
+    <div class="form-group mt-4" style="margin-bottom: 2rem;">
+        <label>
+            Key Features <span style="color: var(--color-danger);">*</span>
+            <span style="font-weight: 400; color: var(--text-muted); font-size: 0.8rem;">
+                (Each feature needs a label and description. Add more with the button below.)
+            </span>
+        </label>
+        <div class="feature-list-wrapper" id="kf_wrapper">
+            <div id="kf_list"></div>
+            <button type="button" id="kf_add" class="btn btn-outline" style="margin-top: 0.5rem;">
+                + Add feature
+            </button>
+        </div>
+        <input type="hidden" name="key_features" id="kf_hidden" value="[]">
+        <div id="kf_count" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+            0 features added.
+        </div>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem;">
+        <button type="submit" class="btn btn-primary" style="padding: 1rem 1.5rem; flex: 1;">
+            Save Changes
+        </button>
+        <a href="{{ url_for('manage_documents') }}" class="btn btn-outline" style="padding: 1rem 1.5rem;">
+            Cancel
+        </a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/feature_input.js') }}"></script>
+<script>
+(function () {
+    const fieldSel = document.getElementById('research_field');
+    const otherWrap = document.getElementById('research_field_other_wrap');
+    function syncOther() {
+        if (fieldSel && otherWrap) otherWrap.hidden = fieldSel.value !== 'Others';
+    }
+    if (fieldSel) fieldSel.addEventListener('change', syncOther);
+    syncOther();
+
+    // Parse the document's stored key_features. It may be:
+    //  - a JSON array of {label, description} objects (new shape)
+    //  - a JSON array of bare strings (legacy)
+    //  - a comma-separated string (very old)
+    //  - empty / null (post-migration, requires re-entry)
+    let initial = [];
+    const raw = {{ (document.key_features or '')|tojson }};
+    if (raw && typeof raw === 'string' && raw.trim()) {
+        const text = raw.trim();
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed)) {
+                initial = parsed.map(function (e) {
+                    if (e && typeof e === 'object') {
+                        return { label: String(e.label || ''), description: String(e.description || '') };
+                    }
+                    return { label: String(e || ''), description: '' };
+                });
+            }
+        } catch (err) {
+            initial = text.split(',')
+                .map(function (s) { return s.trim(); })
+                .filter(Boolean)
+                .map(function (s) { return { label: s, description: '' }; });
+        }
+    }
+
+    const widget = window.initFeatureInput({
+        wrapper: 'kf_wrapper',
+        listEl: 'kf_list',
+        hiddenInput: 'kf_hidden',
+        addBtn: 'kf_add',
+        counterEl: 'kf_count',
+        initial: initial,
+        label: 'feature',
+    });
+
+    const form = document.querySelector('form[action*="/edit"]');
+    if (form && widget) {
+        form.addEventListener('submit', function (e) {
+            if (widget.getFeatures().length < 1) {
+                e.preventDefault();
+                alert('Please add at least one key feature with both a label and description.');
+                widget.focusFirstIncomplete();
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

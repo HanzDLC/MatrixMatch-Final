@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Comparison History - MatrixMatch{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Comparison History</h1>
+        <p style="font-size: 1.1rem;">Browse and review past semantic analyses and matrices.</p>
+    </div>
+    
+    <div style="width: 300px;">
+        <input type="text" id="historySearch" class="form-input" placeholder="Search by ID or program..." style="background-color: var(--color-surface); padding: 0.75rem 1rem;">
+    </div>
+</div>
+
+<div class="table-container">
+    <table class="table" id="historyTable">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Program</th>
+                <th>Threshold</th>
+                <th>Date Run</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% if history_rows and history_rows|length > 0 %}
+            {% for row in history_rows %}
+            <tr>
+                <td style="font-weight: 500; color: var(--color-primary);">#{{ row.history_id }}</td>
+                <td><span class="badge badge-blue">{{ row.academic_program_filter }}</span></td>
+                <td><span class="badge badge-gold">{{ (row.similarity_threshold * 100)|round(0) }}%</span></td>
+                <td style="color: var(--text-muted);">{{ row.created_at.strftime('%b %d, %Y') if row.created_at.strftime else row.created_at }}</td>
+                <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <a href="{{ url_for('history_detail', history_id=row.history_id) }}" class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;">View Analysis</a>
+                        <form method="POST" action="{{ url_for('history_delete', history_id=row.history_id) }}"
+                              onsubmit="return confirm('Delete comparison #{{ row.history_id }}? This cannot be undone.');"
+                              style="margin: 0;">
+                            <button type="submit" class="btn btn-outline" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; color: #b91c1c; border-color: #b91c1c;">Delete</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr>
+                <td colspan="5" class="text-center" style="padding: 3rem; color: var(--text-muted);">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+                    <p>No history entries found in the core database.</p>
+                </td>
+            </tr>
+        {% endif %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Embedded simpler search logic since historical structure changed slightly -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const searchInput = document.getElementById("historySearch");
+    const table = document.getElementById("historyTable");
+    if (!searchInput || !table) return;
+
+    searchInput.addEventListener("keyup", function() {
+        const filter = searchInput.value.toLowerCase();
+        const trs = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+        for (let i = 0; i < trs.length; i++) {
+            const rowText = trs[i].textContent.toLowerCase();
+            trs[i].style.display = rowText.includes(filter) ? "" : "none";
+        }
+    });
+});
+</script>
+{% endblock %}

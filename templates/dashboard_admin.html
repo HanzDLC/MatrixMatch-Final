@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard - MatrixMatch{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Admin Dashboard</h1>
+    <p style="font-size: 1.1rem;">Overview of ecosystem activity and running comparisons.</p>
+</div>
+
+<div class="grid grid-3 mb-8">
+    <div class="card">
+        <div style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">Total Researchers</div>
+        <div style="font-size: 2.5rem; font-weight: 700; color: var(--color-primary);">{{ stats.total_researchers or 0 }}</div>
+    </div>
+
+    <div class="card">
+        <div style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">Total Comparisons</div>
+        <div style="font-size: 2.5rem; font-weight: 700; color: var(--color-primary);">{{ stats.total_comparisons or 0 }}</div>
+    </div>
+
+    <div class="card">
+        <div style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">Last 7 Days Runs</div>
+        <div style="font-size: 2.5rem; font-weight: 700; color: var(--color-primary);">{{ stats.last_7_days_runs or 0 }}</div>
+    </div>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; color: var(--color-primary);">Recent Comparison Runs</h2>
+    {# "View Full History" link removed — admins no longer have access to /history.
+       To browse a single researcher's runs, use Manage Users → History. #}
+</div>
+
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Researcher</th>
+                <th>Program</th>
+                <th>Threshold</th>
+                <th>Created At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in recent_history %}
+            <tr>
+                <td style="font-weight: 500;">#{{ row.history_id }}</td>
+                <td>{{ row.researcher_name }}</td>
+                <td><span class="badge badge-blue">{{ row.academic_program_filter }}</span></td>
+                <td><span class="badge badge-gold">{{ (row.similarity_threshold * 100)|round(0) }}%</span></td>
+                <td style="color: var(--text-muted);">{{ row.created_at }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="text-center" style="padding: 2rem; color: var(--text-muted);">No recent comparisons found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,952 @@
+{% extends "base.html" %}
+{% block title %}Analysis #{{ history.history_id }} - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<!-- Plotly.js library for interactive heatmaps -->
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Analysis #{{ history.history_id }}</h1>
+        <p style="font-size: 1.1rem;">Review Stage 1 matches and Stage 2 semantic overlap results.</p>
+    </div>
+    
+    {% if user and user.role == 'Admin' %}
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">&larr; Back to Admin Dashboard</a>
+    {% else %}
+        <a href="{{ url_for('history') }}" class="btn btn-outline">&larr; Back to History</a>
+    {% endif %}
+</div>
+
+<div class="grid grid-2 mb-8">
+    <div class="card">
+        <h2 class="card-title" style="color: var(--color-primary); font-size: 1.2rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">Run Summary</h2>
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr><td style="padding: 0.25rem 0; color: var(--text-muted); font-weight: 500;">Researcher</td><td style="text-align: right; font-weight: 600;">{{ history.researcher_name }}</td></tr>
+            <tr><td style="padding: 0.25rem 0; color: var(--text-muted); font-weight: 500;">Program Filter</td><td style="text-align: right;"><span class="badge badge-blue">{{ history.academic_program_filter }}</span></td></tr>
+            <tr><td style="padding: 0.25rem 0; color: var(--text-muted); font-weight: 500;">Threshold</td><td style="text-align: right;"><span class="badge badge-gold">{{ (history.similarity_threshold * 100) | round(0) }}%</span></td></tr>
+            <tr><td style="padding: 0.25rem 0; color: var(--text-muted); font-weight: 500;">Date</td><td style="text-align: right;">{{ history.created_at.strftime('%b %d, %Y') if history.created_at.strftime else history.created_at }}</td></tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title" style="color: var(--color-primary); font-size: 1.2rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">Key Features Detected in Your Study</h2>
+        {% if user_key_features and user_key_features|length > 0 %}
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.75rem;">
+                Features the AI extracted from your abstract that the Stage 2 matrix marked as present in your study.
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                {% for feat in user_key_features %}
+                    <span style="background-color: var(--color-bg); border: 1px solid var(--color-border); padding: 0.4rem 0.8rem; border-radius: 999px; font-size: 0.85rem; font-weight: 500; color: var(--color-primary);">{{ feat }}</span>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color: var(--text-muted); font-style: italic;">No key features were detected for your study yet. Run the comparison and the matrix will populate this list.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- STAGE 1 MATCHES -->
+<div class="card" style="margin-bottom: 2rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
+        <h2 class="card-title" style="color: var(--color-primary); font-size: 1.2rem; margin: 0;">Stage 1: Document Similarity Matches</h2>
+        <form method="POST"
+              action="{{ url_for('history_recalculate', history_id=history.history_id) }}"
+              onsubmit="return confirm('Recalculate similarity scores using the current model and the latest documents in the repository? This will overwrite the existing matches for this history entry.');"
+              style="margin: 0;">
+            <button type="submit" class="btn btn-outline" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                <span style="font-size: 1rem; line-height: 1;">&#8635;</span>
+                Recalculate
+            </button>
+        </form>
+    </div>
+
+    {% if matches and matches|length > 0 %}
+    <div style="overflow-x: auto;">
+        <table class="table" style="width: 100%;">
+            <thead>
+                <tr>
+                    <th>Doc ID</th>
+                    <th>Document Title</th>
+                    <th>Research Field</th>
+                    <th>Similarity</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in matches %}
+                {% set field_display = m.research_field if m.research_field != 'Others' or not m.research_field_other else 'Others (' ~ m.research_field_other ~ ')' %}
+                <tr>
+                    <td style="font-weight: 500;">#{{ m.document_id }}</td>
+                    <td style="font-weight: 600; color: var(--color-primary);">{{ m.title }}</td>
+                    <td><span class="badge badge-blue" style="white-space: nowrap;">{{ field_display or '—' }}</span></td>
+                    <td><span class="badge badge-gold">{{ (m.similarity * 100) | round(2) }}%</span></td>
+                    <td style="white-space: nowrap;">
+                        <button onclick="showAbstractModal('abstract_{{ m.document_id }}', 'title_{{ m.document_id }}')" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; cursor: pointer; margin-right: 0.5rem; border-color: var(--color-primary); color: var(--color-primary);">📖 Abstract</button>
+                        {% if m.source_file_path %}
+                        <button onclick="openSourceFileModal({{ m.document_id }}, '{{ m.title | escape }}', '{{ m.source_file_path | escape }}')" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; cursor: pointer; margin-right: 0.5rem;">📄 View File</button>
+                        {% endif %}
+                        {# AI Gap Analysis temporarily hidden — backend route /api/history/<id>/gap_analysis/<doc_id>
+                           and the fetchGapAnalysis() JS function remain in place. Restore the button to re-enable.
+                        <button onclick="fetchGapAnalysis({{ history.history_id }}, {{ m.document_id }}, '{{ m.title | escape }}')" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; cursor: pointer;">✨ AI Gap Analysis</button>
+                        #}
+
+                        <!-- Hidden data containers for safe JS reading -->
+                        <div id="title_{{ m.document_id }}" style="display: none;">{{ m.title }}</div>
+                        <div id="abstract_{{ m.document_id }}" style="display: none;">{{ m.abstract }}</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p style="color: var(--text-muted); padding: 1rem;">No abstracts in the database met the similarity threshold ({{ (history.similarity_threshold * 100) | round(0) }}%).</p>
+    {% endif %}
+</div>
+
+<!-- NEW: Abstract Modal (Hidden by default) -->
+<div id="abstractModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: var(--color-surface, #fff); padding: 2.5rem; border-radius: var(--radius-lg); width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+        <button onclick="document.getElementById('abstractModal').style.display='none'" style="position: absolute; right: 1.5rem; top: 1.5rem; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: 50%; width: 35px; height: 35px; font-size: 1.2rem; cursor: pointer; color: var(--text-color); display: flex; align-items: center; justify-content: center;">&times;</button>
+        <h3 id="modalTitle" style="color: var(--color-primary); margin-top: 0; margin-bottom: 0.5rem; font-size: 1.4rem; padding-right: 2rem;"></h3>
+        <hr style="border: 0; border-bottom: 2px solid var(--color-border); margin-bottom: 1.5rem;">
+        <div id="modalContent" style="color: var(--text-color); line-height: 1.8; white-space: pre-wrap; font-size: 1.05rem;"></div>
+    </div>
+</div>
+
+<script>
+function showAbstractModal(abstractId, titleId) {
+    const abstractText = document.getElementById(abstractId).innerText;
+    const titleText = document.getElementById(titleId).innerText;
+    
+    document.getElementById('modalTitle').innerText = titleText;
+    document.getElementById('modalContent').innerText = abstractText;
+    
+    const modal = document.getElementById('abstractModal');
+    modal.style.display = 'flex';
+}
+</script>
+
+<!-- NEW: AI Gap Analysis Card (Hidden by default) -->
+<div id="aiGapCard" class="card" style="display: none; margin-bottom: 2rem; border-left: 4px solid var(--color-gold); background-color: var(--color-bg);">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem; margin-bottom: 1rem;">
+        <h2 id="aiGapTitle" class="card-title" style="color: var(--color-primary); font-size: 1.2rem; margin: 0;">✨ AI Gap Analysis</h2>
+        <button onclick="document.getElementById('aiGapCard').style.display='none'" style="background:none; border:none; font-size: 1.5rem; cursor: pointer; color: var(--text-muted);">&times;</button>
+    </div>
+    <div id="aiGapLoading" style="display: none; padding: 2rem; text-align: center;">
+        <div style="font-size: 2rem; animation: spin 2s linear infinite; margin-bottom: 1rem;">⚙️</div>
+        <p style="color: var(--text-muted); font-style: italic;">The AI is acting as a peer-reviewer and generating the Gap Analysis...</p>
+    </div>
+    <div id="aiGapContent" style="color: var(--text-color); line-height: 1.6;">
+        <!-- Content injected here via JS -->
+    </div>
+</div>
+
+<style>
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
+
+<script>
+async function fetchGapAnalysis(historyId, docId, docTitle) {
+    const card = document.getElementById('aiGapCard');
+    const titleEl = document.getElementById('aiGapTitle');
+    const loading = document.getElementById('aiGapLoading');
+    const content = document.getElementById('aiGapContent');
+    
+    // Show card + loading state
+    card.style.display = 'block';
+    titleEl.innerText = `✨ AI Gap Analysis vs. ` + docTitle;
+    loading.style.display = 'block';
+    content.innerHTML = '';
+    
+    // Smooth scroll to the card
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    try {
+        const response = await fetch(`/api/history/${historyId}/gap_analysis/${docId}`);
+        const data = await response.json();
+        
+        loading.style.display = 'none';
+        
+        if (response.ok && data.gap_analysis) {
+            content.innerHTML = data.gap_analysis;
+        } else {
+            content.innerHTML = `<p style="color: darkred;">Error: ${data.error || 'Failed to generate analysis.'}</p>`;
+        }
+    } catch (error) {
+        loading.style.display = 'none';
+        content.innerHTML = `<p style="color: darkred;">Network error communicating with the server.</p>`;
+    }
+}
+</script>
+
+<!-- STAGE 2 FEATURE MATRIX (LLM CHECKLIST) -->
+<style>
+.matrix-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    -webkit-overflow-scrolling: touch;
+}
+.matrix-table {
+    width: 100%;
+    border-collapse: separate;   /* required so sticky cells keep borders */
+    border-spacing: 0;
+    min-width: max-content;
+    text-align: center;
+}
+.matrix-table th,
+.matrix-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-surface, #fff);
+}
+.matrix-table thead th {
+    background-color: var(--color-bg);
+    border-bottom: 2px solid var(--color-border);
+}
+.matrix-table .sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    text-align: left;
+    min-width: 16rem;
+    max-width: 18rem;
+    box-shadow: 1px 0 0 var(--color-border);
+}
+.matrix-table thead .sticky-col {
+    z-index: 5;
+}
+.matrix-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+.matrix-pagination .page-info {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+.matrix-pagination .page-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+.matrix-pagination .btn[aria-disabled="true"] {
+    opacity: 0.4;
+    pointer-events: none;
+}
+</style>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.5rem;">
+        <h2 class="card-title" style="color: var(--color-primary); font-size: 1.2rem; margin-bottom: 0;">Stage 2: AI Feature Matrix</h2>
+        <button id="reloadMatrixBtn"
+                type="button"
+                onclick="reloadMatrix({{ history.history_id }})"
+                class="btn btn-outline"
+                style="display: inline-flex; align-items: center; gap: 0.4rem;"
+                title="Discard the cached feature matrix and re-run the AI on the current abstracts.">
+            <span id="reloadMatrixIcon" style="font-size: 1rem; line-height: 1;">&#8635;</span>
+            <span id="reloadMatrixText">Regenerate Matrix</span>
+        </button>
+    </div>
+    <p style="color: var(--text-muted); margin-bottom: 1rem;">
+        The Generative AI has evaluated the top {{ total_top }} matching documents to determine if the extracted key features are conceptually applicable to their methodology and goals.
+    </p>
+
+    {% if feature_matrix and feature_matrix|length > 0 and paginated_top|length > 0 %}
+        <div class="matrix-toggle" style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+            <label style="display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.9rem; color: var(--text-main);">
+                <input type="checkbox" id="matrixShowAllToggle" style="width: auto; margin: 0;">
+                Include features from matched studies
+            </label>
+            <span id="matrixRowCount" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+        </div>
+        <div class="matrix-container">
+            <table class="matrix-table" id="featureMatrixTable">
+                <thead>
+                    <tr>
+                        <th class="sticky-col">Unified Key Feature</th>
+                        <th style="color: var(--color-gold);">User Concept</th>
+                        {% for m in paginated_top %}
+                        <th style="max-width: 15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ m.title }}">
+                            <span style="font-size: 0.8rem; display: block; color: var(--text-muted);">ID: {{ m.document_id }}</span>
+                            {{ m.title }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in feature_matrix %}
+                    <tr data-user-present="{{ 'true' if cell_is_present(row['User Abstract']) else 'false' }}">
+                        <td class="sticky-col" style="font-weight: 600; color: var(--color-primary);">
+                            {{ row.feature }}
+                        </td>
+
+                        {# User Abstract column — click ✓ to highlight where this feature appears in the user's abstract #}
+                        <td style="font-size: 1.2rem;">
+                            {% if cell_is_present(row['User Abstract']) %}
+                                <button type="button"
+                                        class="feature-check-btn"
+                                        title="Click to see your original feature label and description for this row"
+                                        data-history-id="{{ history.history_id }}"
+                                        data-feature="{{ row.feature }}"
+                                        data-target="user"
+                                        data-source-label="Your Study">
+                                    &#10004;
+                                </button>
+                            {% else %}
+                                <span style="color: #ef4444;">&#10008;</span>
+                            {% endif %}
+                        </td>
+
+                        {# Paginated Matched Abstract columns
+                           paginated_indices holds the absolute index of each visible
+                           match in top_matches, so we look up the right "Abstract N" key. #}
+                        {% for idx in paginated_indices %}
+                            {% set key = "Abstract " ~ (idx + 1) %}
+                            {% set m = top_matches[idx] %}
+                            <td style="font-size: 1.2rem;">
+                                {% if cell_is_present(row[key]) %}
+                                    <button type="button"
+                                            class="feature-check-btn"
+                                            title="Click to see your feature side-by-side with this study's feature"
+                                            data-history-id="{{ history.history_id }}"
+                                            data-feature="{{ row.feature }}"
+                                            data-target="{{ m.document_id }}"
+                                            data-source-label="{{ m.title }}">
+                                        &#10004;
+                                    </button>
+                                {% else %}
+                                    <span style="color: #ef4444;">&#10008;</span>
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="matrix-pagination">
+            <div class="page-info">
+                Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+                &middot; {{ total_top }} document{{ '' if total_top == 1 else 's' }}
+            </div>
+            <div class="page-controls">
+                {% if page > 1 %}
+                    <a class="btn btn-outline"
+                       href="{{ url_for('history_detail', history_id=history.history_id, page=page-1, limit=limit) }}">
+                        &larr; Previous
+                    </a>
+                {% else %}
+                    <span class="btn btn-outline" aria-disabled="true">&larr; Previous</span>
+                {% endif %}
+
+                {% if page < total_pages %}
+                    <a class="btn btn-primary"
+                       href="{{ url_for('history_detail', history_id=history.history_id, page=page+1, limit=limit) }}">
+                        Next &rarr;
+                    </a>
+                {% else %}
+                    <span class="btn btn-primary" aria-disabled="true">Next &rarr;</span>
+                {% endif %}
+            </div>
+        </div>
+    {% elif feature_matrix_pending %}
+        <div id="featureMatrixPendingBox" class="text-center" style="padding: 3rem; background-color: var(--color-bg); border-radius: var(--radius-md);">
+            <div style="font-size: 2.5rem; margin-bottom: 1rem;">
+                <span style="display: inline-block; animation: spin 2s linear infinite;">&#9696;</span>
+            </div>
+            <p style="color: var(--text-muted); font-weight: 500; margin-bottom: 0.25rem;">Building feature matrix&hellip;</p>
+            <p style="color: var(--text-muted); font-size: 0.85rem; font-style: italic; margin: 0;">
+                The AI is analyzing your top matches. This usually takes 20&ndash;40 seconds. You can review the Stage 1 results above while you wait.
+            </p>
+        </div>
+        <style>
+            @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        </style>
+        <script>
+        (function() {
+            const historyId = {{ history.history_id }};
+            const box = document.getElementById('featureMatrixPendingBox');
+            fetch(`/api/history/${historyId}/feature_matrix`, { credentials: 'same-origin' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.feature_matrix && data.feature_matrix.length > 0) {
+                        window.location.reload();
+                    } else {
+                        box.innerHTML = '<div style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5;">📊</div>' +
+                            '<p style="color: var(--text-muted); font-style: italic;">The feature matrix could not be generated for this comparison.</p>';
+                    }
+                })
+                .catch(err => {
+                    console.error('Feature matrix fetch failed:', err);
+                    box.innerHTML = '<div style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5;">⚠️</div>' +
+                        '<p style="color: var(--text-muted); font-style: italic;">Failed to load the feature matrix. Please refresh the page to retry.</p>';
+                });
+        })();
+        </script>
+    {% else %}
+        <div class="text-center" style="padding: 3rem; background-color: var(--color-bg); border-radius: var(--radius-md);">
+            <div style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5;">📊</div>
+            <p style="color: var(--text-muted); font-style: italic;">Not enough data to generate the Stage 2 feature matrix.</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+// Matrix row toggle: default view hides rows whose "User Concept" cell is ✗
+// (i.e. repo-only features). Flipping the checkbox shows every row.
+(function () {
+    const toggle = document.getElementById('matrixShowAllToggle');
+    const table = document.getElementById('featureMatrixTable');
+    const counter = document.getElementById('matrixRowCount');
+    if (!toggle || !table || !counter) return;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr[data-user-present]'));
+    const totalRows = rows.length;
+    const userRows = rows.filter(r => r.dataset.userPresent === 'true').length;
+
+    function apply() {
+        const showAll = toggle.checked;
+        let visible = 0;
+        rows.forEach(r => {
+            const isUser = r.dataset.userPresent === 'true';
+            const show = showAll || isUser;
+            r.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+        if (showAll) {
+            counter.textContent = `Showing all ${totalRows} feature${totalRows === 1 ? '' : 's'}.`;
+        } else {
+            const hidden = totalRows - visible;
+            counter.textContent = hidden > 0
+                ? `Showing ${visible} of your key feature${visible === 1 ? '' : 's'} (${hidden} from matched studies hidden).`
+                : `Showing ${visible} of your key feature${visible === 1 ? '' : 's'}.`;
+        }
+    }
+    toggle.addEventListener('change', apply);
+    apply();
+})();
+
+async function reloadMatrix(historyId) {
+    const btn = document.getElementById('reloadMatrixBtn');
+    const icon = document.getElementById('reloadMatrixIcon');
+    const text = document.getElementById('reloadMatrixText');
+    
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+    btn.style.cursor = 'wait';
+    icon.style.display = 'inline-block';
+    icon.style.animation = 'spin 2s linear infinite';
+    text.innerText = 'AI is rethinking...';
+
+    try {
+        const response = await fetch(`/api/history/${historyId}/reload_matrix`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to regenerate matrix.'));
+            resetBtn();
+        }
+    } catch (error) {
+        alert('Network error communicating with the server.');
+        resetBtn();
+    }
+    
+    function resetBtn() {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        icon.style.animation = '';
+        text.innerText = 'Regenerate Matrix';
+    }
+}
+</script>
+
+
+{# ================================================================
+   SOURCE-FILE MODAL
+   Opens when the researcher clicks "📄 View File" on a Stage 1 match.
+   Renders PDFs inline in an iframe. DOCX files can't be previewed in
+   the browser so we show a download-only fallback. Authenticated
+   users hit /documents/<id>/source-file (no admin gate).
+   ================================================================ #}
+<style>
+.sf-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 1rem;
+}
+.sf-overlay.is-open { display: flex; }
+.sf-modal {
+    background: var(--color-surface, #fff);
+    border-radius: var(--radius-md, 12px);
+    width: 100%;
+    max-width: 1100px;
+    height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.5);
+    overflow: hidden;
+}
+.sf-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+}
+.sf-modal__title {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: 1rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sf-modal__actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+.sf-modal__body {
+    flex: 1;
+    overflow: hidden;
+    background-color: #525659;
+    position: relative;
+}
+.sf-modal__body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+.sf-modal__fallback {
+    color: #fff;
+    text-align: center;
+    padding: 3rem 2rem;
+    font-size: 1rem;
+    line-height: 1.6;
+}
+.sf-modal__fallback p { margin: 0.5rem 0; }
+</style>
+
+<div id="sourceFileOverlay" class="sf-overlay" onclick="closeSourceFileOnBackdrop(event)">
+    <div class="sf-modal" role="dialog" aria-modal="true" aria-labelledby="sfTitle">
+        <div class="sf-modal__header">
+            <h3 id="sfTitle" class="sf-modal__title">Source File</h3>
+            <div class="sf-modal__actions">
+                <a id="sfDownloadBtn" href="#" class="btn btn-outline" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">⬇ Download</a>
+                <button type="button" class="fh-modal__close" onclick="closeSourceFileModal()" aria-label="Close" style="font-size: 1.5rem; line-height: 1; cursor: pointer; background: none; border: none; color: var(--text-muted); padding: 0;">&times;</button>
+            </div>
+        </div>
+        <div id="sfBody" class="sf-modal__body"></div>
+    </div>
+</div>
+
+<script>
+function openSourceFileModal(documentId, title, sourcePath) {
+    const overlay = document.getElementById('sourceFileOverlay');
+    const titleEl = document.getElementById('sfTitle');
+    const body    = document.getElementById('sfBody');
+    const dl      = document.getElementById('sfDownloadBtn');
+
+    titleEl.textContent = title || ('Document #' + documentId);
+    titleEl.title = title || '';
+
+    const inlineUrl   = '/documents/' + documentId + '/source-file';
+    const downloadUrl = inlineUrl + '?download=1';
+    dl.href = downloadUrl;
+
+    // Detect file extension from sourcePath. Browsers render PDFs natively
+    // via <iframe>; .docx can't preview, so we surface a download CTA.
+    const lower = (sourcePath || '').toLowerCase();
+    body.innerHTML = '';
+    if (lower.endsWith('.pdf')) {
+        const iframe = document.createElement('iframe');
+        iframe.src = inlineUrl;
+        iframe.title = title || 'Source file';
+        body.appendChild(iframe);
+    } else if (lower.endsWith('.docx')) {
+        body.innerHTML = '<div class="sf-modal__fallback">'
+            + '<p style="font-size: 3rem; margin: 0;">📄</p>'
+            + '<p><strong>This document is a .docx file.</strong></p>'
+            + '<p>The browser cannot preview Word documents inline. Click <em>Download</em> to open it in your word processor.</p>'
+            + '</div>';
+    } else {
+        // Unknown extension; fall back to a generic iframe and let the
+        // browser do whatever it does. This shouldn't happen because
+        // experimental upload only accepts .pdf / .docx.
+        const iframe = document.createElement('iframe');
+        iframe.src = inlineUrl;
+        iframe.title = title || 'Source file';
+        body.appendChild(iframe);
+    }
+
+    overlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeSourceFileModal() {
+    const overlay = document.getElementById('sourceFileOverlay');
+    const body    = document.getElementById('sfBody');
+    overlay.classList.remove('is-open');
+    document.body.style.overflow = '';
+    // Tear down iframe so the PDF stops downloading and audio (if any) stops
+    body.innerHTML = '';
+}
+
+function closeSourceFileOnBackdrop(event) {
+    if (event.target.id === 'sourceFileOverlay') {
+        closeSourceFileModal();
+    }
+}
+
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('sourceFileOverlay');
+        if (overlay && overlay.classList.contains('is-open')) closeSourceFileModal();
+    }
+});
+</script>
+
+
+{# ================================================================
+   FEATURE-COMPARE MODAL
+   Activated by clicking a ✓ in the Stage 2 feature matrix. Shows the
+   user's original feature (label + description) side by side with the
+   matched repo doc's feature so the researcher can verify the merge
+   was correct. Powered by /api/history/<id>/feature_compare.
+   ================================================================ #}
+<style>
+.feature-check-btn {
+    background: none;
+    border: none;
+    padding: 0.2rem 0.5rem;
+    font: inherit;
+    font-size: 1.2rem;
+    color: #10b981;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.15s, transform 0.15s;
+}
+.feature-check-btn:hover {
+    background-color: rgba(16, 185, 129, 0.12);
+    transform: scale(1.15);
+}
+.feature-check-btn:focus {
+    outline: 2px solid rgba(16, 185, 129, 0.5);
+    outline-offset: 1px;
+}
+
+.fh-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1.5rem;
+}
+.fh-overlay.is-open { display: flex; }
+
+.fh-modal {
+    background: var(--color-surface, #fff);
+    border-radius: var(--radius-md, 12px);
+    width: 100%;
+    max-width: 880px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.4);
+    overflow: hidden;
+}
+.fh-modal__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+}
+.fh-modal__title {
+    margin: 0;
+    color: var(--color-primary);
+    font-size: 1.1rem;
+    line-height: 1.3;
+}
+.fh-modal__title small {
+    display: block;
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+}
+.fh-modal__close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0;
+}
+.fh-modal__close:hover { color: var(--color-primary); }
+
+.fh-modal__body {
+    padding: 1.25rem 1.5rem;
+    overflow-y: auto;
+    color: var(--text-color);
+    font-size: 0.95rem;
+}
+.fh-modal__loading {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.fh-modal__footer {
+    padding: 0.75rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: right;
+}
+
+/* Side-by-side feature comparison cards */
+.fc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+@media (max-width: 600px) {
+    .fc-grid { grid-template-columns: 1fr; }
+}
+.fc-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 8px);
+    padding: 1rem;
+    background-color: var(--color-bg);
+}
+.fc-card--user { border-left: 4px solid var(--color-gold, #f59e0b); }
+.fc-card--doc  { border-left: 4px solid var(--color-primary, #1e3a8a); }
+.fc-card--missing {
+    border-left: 4px solid var(--color-border);
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1.5rem 1rem;
+}
+.fc-card__source {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin: 0 0 0.5rem 0;
+}
+.fc-card__label {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 0.6rem 0;
+    line-height: 1.3;
+}
+.fc-card__desc {
+    margin: 0;
+    line-height: 1.55;
+    color: var(--text-color);
+    font-size: 0.92rem;
+}
+.fc-card__desc--empty {
+    font-style: italic;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.fc-canonical {
+    background-color: rgba(245, 158, 11, 0.08);
+    border-left: 3px solid var(--color-gold, #f59e0b);
+    padding: 0.6rem 0.85rem;
+    margin-bottom: 1rem;
+    border-radius: var(--radius-sm, 4px);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+.fc-canonical strong { color: var(--color-primary); font-weight: 600; }
+</style>
+
+<div id="featureHighlightOverlay" class="fh-overlay" onclick="closeFeatureHighlightOnBackdrop(event)">
+    <div class="fh-modal" role="dialog" aria-modal="true" aria-labelledby="fhTitle">
+        <div class="fh-modal__header">
+            <h3 id="fhTitle" class="fh-modal__title">
+                Feature Match
+                <small id="fhSubtitle">&nbsp;</small>
+            </h3>
+            <button type="button" class="fh-modal__close" onclick="closeFeatureHighlight()" aria-label="Close">&times;</button>
+        </div>
+        <div id="fhBody" class="fh-modal__body">
+            <div id="fhLoading" class="fh-modal__loading">
+                <span style="font-size: 1.5rem; display: inline-block; animation: spin 2s linear infinite;">&#9881;</span>
+                <p>Loading feature comparison...</p>
+            </div>
+            <div id="fhContent" style="display: none;"></div>
+        </div>
+        <div class="fh-modal__footer">
+            <span id="fhFooter">&nbsp;</span>
+        </div>
+    </div>
+</div>
+
+<script>
+function fhEscape(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function fhCardHtml(side, feat) {
+    // side: 'user' or 'doc'; feat: {label, description} or null/undefined.
+    const sourceText = side === 'user' ? 'Your Concept' : 'Repository Study';
+    const cardClass  = side === 'user' ? 'fc-card--user' : 'fc-card--doc';
+    if (!feat) {
+        return `<div class="fc-card fc-card--missing">
+            <p class="fc-card__source">${sourceText}</p>
+            <p style="margin: 0;">No feature on this side &mdash; this row is ${side === 'user' ? 'repo-only' : 'user-only'}.</p>
+        </div>`;
+    }
+    const desc = feat.description && feat.description.trim()
+        ? `<p class="fc-card__desc">${fhEscape(feat.description)}</p>`
+        : `<p class="fc-card__desc fc-card__desc--empty">(No description recorded for this feature.)</p>`;
+    return `<div class="fc-card ${cardClass}">
+        <p class="fc-card__source">${sourceText}</p>
+        <h4 class="fc-card__label">${fhEscape(feat.label || '(untitled)')}</h4>
+        ${desc}
+    </div>`;
+}
+
+function openFeatureCompare(historyId, feature, target, sourceLabel) {
+    const overlay  = document.getElementById('featureHighlightOverlay');
+    const titleEl  = document.getElementById('fhTitle');
+    const subEl    = document.getElementById('fhSubtitle');
+    const loading  = document.getElementById('fhLoading');
+    const content  = document.getElementById('fhContent');
+    const footer   = document.getElementById('fhFooter');
+
+    titleEl.firstChild.nodeValue = feature + ' ';
+    subEl.textContent = target === 'user'
+        ? 'How this feature was clustered'
+        : 'Side-by-side merge with ' + sourceLabel;
+    content.innerHTML = '';
+    content.style.display = 'none';
+    loading.style.display = 'block';
+    footer.textContent = '';
+    overlay.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+
+    const params = new URLSearchParams({ feature: feature, target: String(target) });
+    fetch(`/api/history/${historyId}/feature_compare?${params.toString()}`)
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+            if (!ok) {
+                content.innerHTML = `<p style="color: darkred;">Error: ${fhEscape(data.error || 'Failed to load comparison.')}</p>`;
+                return;
+            }
+            const userCard = fhCardHtml('user', data.user);
+            const docCard  = data.doc !== undefined && data.doc !== null
+                ? fhCardHtml('doc', data.doc)
+                : (target === 'user'
+                    ? `<div class="fc-card fc-card--missing">
+                            <p class="fc-card__source">Repository Study</p>
+                            <p style="margin: 0;">Click a &#10004; in any repo column on this row to see the matched repo feature here.</p>
+                        </div>`
+                    : fhCardHtml('doc', null));
+            const canonicalLine = `<div class="fc-canonical">
+                These features were merged into the unified row <strong>${fhEscape(data.feature)}</strong> because their descriptions describe the same capability.
+            </div>`;
+            content.innerHTML = canonicalLine + `<div class="fc-grid">${userCard}${docCard}</div>`;
+
+            const userOk = !!data.user;
+            const docOk  = !!data.doc;
+            if (userOk && docOk) {
+                footer.textContent = 'Both sides merged into this row.';
+            } else if (userOk) {
+                footer.textContent = 'User-only row: no repo study contributed a feature to this cluster.';
+            } else if (docOk) {
+                footer.textContent = 'Repo-only row: your concept did not contribute a feature to this cluster.';
+            } else {
+                footer.textContent = '';
+            }
+        })
+        .catch(() => {
+            loading.style.display = 'none';
+            content.style.display = 'block';
+            content.innerHTML = `<p style="color: darkred;">Network error contacting the server.</p>`;
+        });
+}
+
+function closeFeatureHighlight() {
+    const overlay = document.getElementById('featureHighlightOverlay');
+    overlay.classList.remove('is-open');
+    document.body.style.overflow = '';
+}
+
+function closeFeatureHighlightOnBackdrop(event) {
+    if (event.target.id === 'featureHighlightOverlay') {
+        closeFeatureHighlight();
+    }
+}
+
+// Esc to close
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        const overlay = document.getElementById('featureHighlightOverlay');
+        if (overlay && overlay.classList.contains('is-open')) closeFeatureHighlight();
+    }
+});
+
+// Delegated click handler so we don't have to inline JS in each button.
+// Reads the data-* attributes and forwards to openFeatureCompare().
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.feature-check-btn');
+    if (!btn) return;
+    const historyId   = btn.dataset.historyId;
+    const feature     = btn.dataset.feature;
+    const target      = btn.dataset.target;
+    const sourceLabel = btn.dataset.sourceLabel || '';
+    if (historyId && feature && target) {
+        openFeatureCompare(historyId, feature, target, sourceLabel);
+    }
+});
+</script>
+{% endblock %}

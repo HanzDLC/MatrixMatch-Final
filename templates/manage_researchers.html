@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}Manage Users - MatrixMatch{% endblock %}
+
+{% block extra_head %}
+<style>
+/* Compact layout for the Manage Users table so 8 columns + role-select +
+   3 action buttons fit within the content width without horizontal scroll. */
+#researchersTable th,
+#researchersTable td {
+    padding: 0.55rem 0.5rem;
+    font-size: 0.85rem;
+    vertical-align: middle;
+}
+#researchersTable .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+#researchersTable .role-select {
+    padding: 0.2rem 0.25rem;
+    font-size: 0.75rem;
+    height: auto;
+    line-height: 1.2;
+}
+#researchersTable .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+}
+#researchersTable td:nth-child(3) {       /* Email column: allow ellipsis */
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
+            Manage Users
+            <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
+                         font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
+                         border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
+                {{ total_users }}
+            </span>
+        </h1>
+        <p style="font-size: 1.1rem;">Activate/deactivate accounts, change roles, and review comparison history.</p>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <form method="get" action="{{ url_for('manage_researchers') }}" style="margin: 0; display: flex; gap: 0.5rem; align-items: center;">
+            <input type="text" name="q" value="{{ q or '' }}" class="form-input"
+                   placeholder="Search name or email..." style="width: 220px;">
+            <select name="role" class="form-input" style="width: 140px;">
+                <option value="">All roles</option>
+                <option value="Admin" {% if role_filter == 'Admin' %}selected{% endif %}>Admin</option>
+                <option value="Researcher" {% if role_filter == 'Researcher' %}selected{% endif %}>Researcher</option>
+            </select>
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Search</button>
+            {% if q or role_filter %}
+              <a href="{{ url_for('manage_researchers') }}" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Clear</a>
+            {% endif %}
+        </form>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
+    </div>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="table-container">
+    {% if researchers and researchers|length > 0 %}
+        <table class="table" id="researchersTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Full Name</th>
+                    <th>Email Address</th>
+                    <th>Role</th>
+                    <th>Change Role</th>
+                    <th>Registration Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in researchers %}
+                {% set is_self = r.researcher_id == user.id %}
+                <tr>
+                    <td style="font-weight: 500; color: var(--color-primary);">#{{ r.researcher_id }}</td>
+                    <td style="font-weight: 600;">
+                        {{ r.first_name }} {{ r.last_name }}
+                        {% if is_self %}
+                            <span class="badge badge-gray" style="margin-left: 0.35rem; font-size: 0.65rem;">you</span>
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--text-muted);">{{ r.email }}</td>
+                    <td>
+                        {% if r.role == 'Admin' %}
+                            <span class="badge badge-gold">Admin</span>
+                        {% else %}
+                            <span class="badge badge-blue">Researcher</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if is_self %}
+                            <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">—</span>
+                        {% else %}
+                            <form method="post"
+                                  action="{{ url_for('admin_change_researcher_role', researcher_id=r.researcher_id) }}"
+                                  style="margin: 0; display: flex; gap: 0.3rem; align-items: center;"
+                                  class="js-change-role-form"
+                                  data-name="{{ r.first_name }} {{ r.last_name }}"
+                                  data-current-role="{{ r.role }}">
+                                <select name="new_role" class="form-input role-select" style="padding: 0.2rem 0.3rem; font-size: 0.75rem; width: auto;">
+                                    <option value="Admin" {% if r.role == 'Admin' %}selected{% endif %}>Admin</option>
+                                    <option value="Researcher" {% if r.role == 'Researcher' %}selected{% endif %}>Researcher</option>
+                                </select>
+                                <button type="submit" class="btn btn-outline" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;">Save</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.registered_date.strftime('%b %d, %Y') if r.registered_date.strftime else r.registered_date }}</td>
+                    <td>
+                        {% if r.is_active %}
+                            <span class="badge badge-green">Active</span>
+                        {% else %}
+                            <span class="badge badge-red">Deactivated</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <a href="{{ url_for('admin_reset_password', researcher_id=r.researcher_id) }}" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Reset</a>
+
+                            <a href="{{ url_for('admin_view_history', researcher_id=r.researcher_id) }}" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">History</a>
+
+                            {% if not is_self %}
+                                <form method="post"
+                                      action="{{ url_for('admin_toggle_researcher_active', researcher_id=r.researcher_id) }}"
+                                      style="margin: 0;"
+                                      class="js-toggle-researcher-form"
+                                      data-name="{{ r.first_name }} {{ r.last_name }}"
+                                      data-active="{{ '1' if r.is_active else '0' }}">
+                                    {% if r.is_active %}
+                                        <button type="submit" class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Deactivate</button>
+                                    {% else %}
+                                        <button type="submit" class="btn btn-primary" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Activate</button>
+                                    {% endif %}
+                                </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="text-center" style="padding: 4rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">👥</div>
+            <p style="color: var(--text-muted); font-size: 1.1rem;">
+                {% if q or role_filter %}No users match your search.{% else %}No users found in the system.{% endif %}
+            </p>
+        </div>
+    {% endif %}
+</div>
+
+{% if total_pages > 1 %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+    <div style="color: var(--text-muted); font-size: 0.9rem;">
+        Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+        — showing {{ researchers|length }} of {{ total_users }}
+    </div>
+    <div style="display: flex; gap: 0.4rem; align-items: center;">
+        {% set qs = 'q=' ~ (q|urlencode) ~ '&role=' ~ (role_filter|urlencode) ~ '&per_page=' ~ per_page %}
+        {% if page > 1 %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page=1">« First</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page - 1 }}">‹ Prev</a>
+        {% endif %}
+        {% set start = [1, page - 2]|max %}
+        {% set end = [total_pages, page + 2]|min %}
+        {% for p in range(start, end + 1) %}
+            {% if p == page %}
+                <span class="btn btn-primary" style="padding: 0.4rem 0.75rem;">{{ p }}</span>
+            {% else %}
+                <a class="btn btn-outline" style="padding: 0.4rem 0.75rem;" href="?{{ qs }}&page={{ p }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page + 1 }}">Next ›</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ total_pages }}">Last »</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Client-side search
+    const searchInput = document.getElementById("researcherSearch");
+    const table = document.getElementById("researchersTable");
+    if (searchInput && table) {
+        searchInput.addEventListener("keyup", function() {
+            const filter = searchInput.value.toLowerCase();
+            const trs = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+            for (let i = 0; i < trs.length; i++) {
+                const rowText = trs[i].textContent.toLowerCase();
+                trs[i].style.display = rowText.includes(filter) ? "" : "none";
+            }
+        });
+    }
+
+    // Confirm only when deactivating — activating is low-stakes.
+    document.querySelectorAll(".js-toggle-researcher-form").forEach(form => {
+        form.addEventListener("submit", function (e) {
+            const active = form.dataset.active === "1";
+            if (!active) return;  // inactive → activating, no confirm
+            const name = form.dataset.name || "this user";
+            if (!confirm(`Deactivate ${name}? They won't be able to log in until an admin reactivates them. Their comparison history is preserved.`)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Role change always confirms — privilege escalation/demotion is high-stakes.
+    // The <select>'s current value is what the server will set; the row's
+    // data-current-role tells us what it was, so we can distinguish a no-op
+    // save from a real change.
+    document.querySelectorAll(".js-change-role-form").forEach(form => {
+        form.addEventListener("submit", function (e) {
+            const currentRole = form.dataset.currentRole || "";
+            const select = form.querySelector('select[name="new_role"]');
+            const newRole = select ? select.value : "";
+            if (!newRole || newRole === currentRole) return;  // no-op, let server short-circuit
+            const name = form.dataset.name || "this user";
+            const msg = newRole === "Admin"
+                ? `Promote ${name} to Admin? They will get full administrative access (manage users, documents, settings).`
+                : `Demote ${name} to Researcher? They will lose administrative access immediately.`;
+            if (!confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

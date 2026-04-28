@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Welcome - MatrixMatch{% endblock %}
+
+{% block public_content %}
+<!-- HERO SECTION -->
+<section class="hero" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+    <h1>MatrixMatch System</h1>
+    <p>A highly cohesive NLP-powered abstract matching and comparison system engineered for robust research evaluation.</p>
+    <div>
+        <a href="{{ url_for('login') }}" class="btn btn-primary" style="padding: 1rem 2rem; font-size: 1.1rem; margin-top: 2rem;">Get Started Now</a>
+    </div>
+</section>
+
+<!-- FEATURES SECTION -->
+<section style="padding: 5rem 2rem; display: flex; flex-direction: column; align-items: center; background-color: var(--color-surface);">
+    <h2 style="font-size: 2.5rem; margin-bottom: 3rem; color: var(--color-primary);">Powerful Evaluation Tools</h2>
+
+    <div class="grid grid-3" style="max-width: 1200px; width: 100%;">
+        <div class="card text-center" style="border-top: 4px solid var(--color-secondary);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
+            <h3 class="card-title">Stage 1: Semantic Search</h3>
+            <p class="card-text">Compare your abstract against a full document database using SentenceTransformers for high-fidelity cosine similarity scoring.</p>
+        </div>
+
+        <div class="card text-center" style="border-top: 4px solid var(--color-secondary);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+            <h3 class="card-title">Stage 2: Deep Analysis</h3>
+            <p class="card-text">Automatically extract keywords and generate interactive similarity matrices to find exact conceptual overlaps.</p>
+        </div>
+
+        <div class="card text-center" style="border-top: 4px solid var(--color-secondary);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🕒</div>
+            <h3 class="card-title">Historical Tracking</h3>
+            <p class="card-text">Securely save and retrieve past comparisons. Admins can view ecosystem metrics and manage researcher permissions.</p>
+        </div>
+    </div>
+</section>
+{% endblock %}

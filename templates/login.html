@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Login - MatrixMatch{% endblock %}
+
+{% block public_content %}
+<div class="auth-page">
+    <div class="auth-card">
+        <img src="{{ url_for('static', filename='img/logo.svg') }}"
+             alt="MatrixMatch" class="auth-logo">
+        <h1 class="auth-title">Welcome Back</h1>
+        <p class="auth-subtitle">Sign in to your MatrixMatch account to continue.</p>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+            {% for category, message in messages %}
+              <div class="flash flash--{{ category }}">{{ message }}</div>
+            {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form method="post" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email" class="form-input" placeholder="you@example.com" required>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0.5rem;">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" class="form-input" placeholder="••••••••" required>
+            </div>
+
+            <div style="text-align: right; margin-bottom: 1.75rem;">
+                <a href="{{ url_for('forgot_password') }}"
+                   style="font-size: 0.85rem; color: var(--text-muted); text-decoration: underline;">
+                    Forgot password?
+                </a>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full" style="padding: 1rem; font-size: 1rem;">
+                Sign In
+            </button>
+        </form>
+
+        <p class="text-center" style="margin-top: 1.5rem; font-size: 0.95rem;">
+            Don't have an account? <a href="{{ url_for('register') }}" style="color: var(--color-secondary); font-weight: 600;">Register Here</a>
+        </p>
+
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Researcher Dashboard - MatrixMatch{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Welcome, {{ session.get('first_name') }}</h1>
+    <p style="font-size: 1.1rem;">Manage your abstracts and semantic comparisons.</p>
+</div>
+
+<div class="grid grid-2 mb-8">
+    <a href="{{ url_for('comparison_new') }}" class="card" style="text-decoration: none; display: block;">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem;">✨</div>
+        <h2 class="card-title" style="color: var(--color-primary);">Start New Comparison</h2>
+        <p class="card-text">Compare your latest abstract design against historical records in the database.</p>
+        <span style="color: var(--color-secondary); font-weight: 600;">Go &rarr;</span>
+    </a>
+
+    <a href="{{ url_for('history') }}" class="card" style="text-decoration: none; display: block;">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem;">📂</div>
+        <h2 class="card-title" style="color: var(--color-primary);">View History</h2>
+        <p class="card-text">Access your past analyses, detailed matrices, and conceptual overlaps.</p>
+        <span style="color: var(--color-secondary); font-weight: 600;">Browse &rarr;</span>
+    </a>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <h2 style="font-size: 1.25rem; color: var(--color-primary);">Your Recent Activity</h2>
+</div>
+
+<div class="table-container">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Comparison ID</th>
+                <th>Program Filter</th>
+                <th>Threshold</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in recent_history %}
+            <tr>
+                <td style="font-weight: 500;">#{{ row.history_id }}</td>
+                <td><span class="badge badge-blue">{{ row.academic_program_filter }}</span></td>
+                <td><span class="badge badge-gold">{{ (row.similarity_threshold * 100)|round(0) }}%</span></td>
+                <td style="color: var(--text-muted);">{{ row.created_at }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="text-center" style="padding: 2rem; color: var(--text-muted);">No recent comparisons yet. Start your first one!</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

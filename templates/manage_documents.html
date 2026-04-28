@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Manage Documents - MatrixMatch{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
+    <div>
+        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
+            Manage Documents
+            <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
+                         font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
+                         border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
+                {{ total_documents }}
+            </span>
+        </h1>
+        <p style="font-size: 1.1rem;">
+            Edit or remove studies in the repository.
+        </p>
+    </div>
+
+    <div style="display: flex; gap: 1rem; align-items: center;">
+        <form method="get" action="{{ url_for('manage_documents') }}" style="margin: 0; display: flex; gap: 0.5rem; align-items: center;">
+            <input type="text" name="q" value="{{ q or '' }}" class="form-input"
+                   placeholder="Search title, authors, abstract..." style="width: 260px;">
+            <select name="field" class="form-input" style="width: 200px;">
+                <option value="">All fields</option>
+                {% for f in research_fields %}
+                  <option value="{{ f }}" {% if research_field_filter == f %}selected{% endif %}>{{ f }}</option>
+                {% endfor %}
+            </select>
+            <input type="hidden" name="per_page" value="{{ per_page }}">
+            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Search</button>
+            {% if q or research_field_filter %}
+              <a href="{{ url_for('manage_documents') }}" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Clear</a>
+            {% endif %}
+        </form>
+        <a href="{{ url_for('upload_document') }}" class="btn btn-outline">+ Upload New</a>
+        <form method="post" action="{{ url_for('admin_clean_staging') }}" style="margin: 0;"
+              onsubmit="return confirm('Delete staging files older than 24 hours?');">
+            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem; font-size: 0.85rem;">
+                Clean staging
+            </button>
+        </form>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
+    </div>
+</div>
+
+<!-- Flash messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-messages">
+    {% for category, message in messages %}
+      <div class="flash flash--{{ category }}">{{ message }}</div>
+    {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="table-container">
+    {% if documents and documents|length > 0 %}
+        <table class="table" id="documentsTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Research Field</th>
+                    <th>Authors</th>
+                    <th>Abstract Preview</th>
+                    <th>Key Features</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in documents %}
+                <tr>
+                    <td style="font-weight: 500; color: var(--color-primary);">#{{ d.document_id }}</td>
+                    <td style="font-weight: 600; max-width: 18rem;">{{ d.title }}</td>
+                    <td><span class="badge badge-blue" style="white-space: nowrap;">{{ d.research_field_display }}</span></td>
+                    <td style="color: var(--text-muted); max-width: 12rem;">{{ d.authors or '—' }}</td>
+                    <td style="color: var(--text-muted); font-size: 0.85rem; max-width: 22rem;">{{ d.abstract_preview }}</td>
+                    <td>
+                        <div style="font-size: 0.85rem; line-height: 1.4; max-width: 20rem;">
+                            {% if d.parsed_key_features %}
+                                {% for feat in d.parsed_key_features %}
+                                    <span style="background-color: #fef3c7; color: #b45309; padding: 0.1rem 0.3rem; border-radius: 4px; font-weight: 500;" 
+                                          title="{{ feat.description }}">{{ feat.label }}</span>{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                            {% else %}
+                                <span style="color: var(--text-muted); font-style: italic;">No features extracted</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <a href="{{ url_for('admin_edit_document', document_id=d.document_id) }}"
+                               class="btn btn-outline js-edit-document-link"
+                               data-title="{{ d.title }}"
+                               data-references="{{ d.reference_count }}"
+                               style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Edit</a>
+
+                            {% if d.source_file_path %}
+                            <a href="{{ url_for('admin_download_source_file', document_id=d.document_id) }}"
+                               class="btn btn-outline"
+                               style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">File</a>
+                            {% endif %}
+
+                            <form method="post"
+                                  action="{{ url_for('admin_delete_document', document_id=d.document_id) }}"
+                                  style="margin: 0;"
+                                  class="js-delete-document-form"
+                                  data-title="{{ d.title }}"
+                                  data-references="{{ d.reference_count }}">
+                                <button type="submit" class="btn btn-danger" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Delete</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="text-center" style="padding: 4rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
+            <p style="color: var(--text-muted); font-size: 1.1rem;">
+                {% if q or research_field_filter %}
+                  No documents match your search.
+                {% else %}
+                  No documents in the repository yet.
+                {% endif %}
+            </p>
+            {% if not q and not research_field_filter %}
+              <a href="{{ url_for('upload_document') }}" class="btn btn-primary" style="margin-top: 1rem;">+ Upload First Document</a>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+{% if total_pages > 1 %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+    <div style="color: var(--text-muted); font-size: 0.9rem;">
+        Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+        — showing {{ documents|length }} of {{ total_documents }}
+    </div>
+    <div style="display: flex; gap: 0.4rem; align-items: center;">
+        {% set qs = 'q=' ~ (q|urlencode) ~ '&field=' ~ (research_field_filter|urlencode) ~ '&per_page=' ~ per_page %}
+        {% if page > 1 %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page=1">« First</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page - 1 }}">‹ Prev</a>
+        {% endif %}
+        {% set start = [1, page - 2]|max %}
+        {% set end = [total_pages, page + 2]|min %}
+        {% for p in range(start, end + 1) %}
+            {% if p == page %}
+                <span class="btn btn-primary" style="padding: 0.4rem 0.75rem;">{{ p }}</span>
+            {% else %}
+                <a class="btn btn-outline" style="padding: 0.4rem 0.75rem;" href="?{{ qs }}&page={{ p }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page + 1 }}">Next ›</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ total_pages }}">Last »</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    // Client-side search across the table
+    const searchInput = document.getElementById("documentSearch");
+    const table = document.getElementById("documentsTable");
+    if (searchInput && table) {
+        searchInput.addEventListener("keyup", function () {
+            const filter = searchInput.value.toLowerCase();
+            const trs = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
+            for (let i = 0; i < trs.length; i++) {
+                const rowText = trs[i].textContent.toLowerCase();
+                trs[i].style.display = rowText.includes(filter) ? "" : "none";
+            }
+        });
+    }
+
+    // Edit confirmation — only fires if the document has been linked to a past comparison
+    document.querySelectorAll(".js-edit-document-link").forEach(link => {
+        link.addEventListener("click", function (e) {
+            const refs = parseInt(link.dataset.references || "0", 10);
+            if (refs <= 0) return;  // no warning needed for unused docs
+            const title = link.dataset.title || "this document";
+            const msg =
+                `⚠ This document has been linked to a comparison.\n\n` +
+                `"${title}" is referenced by ${refs} past comparison run${refs === 1 ? "" : "s"}.\n\n` +
+                `Editing it (especially the abstract) will not retroactively update those runs — ` +
+                `their similarity scores were computed against the current text and will continue to ` +
+                `display as they were until someone clicks Recalculate on each one.\n\n` +
+                `Continue to the edit form?`;
+            if (!confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Delete confirmation — surface reference count and use the linked-to-a-comparison phrasing
+    document.querySelectorAll(".js-delete-document-form").forEach(form => {
+        form.addEventListener("submit", function (e) {
+            const title = form.dataset.title || "this document";
+            const refs = parseInt(form.dataset.references || "0", 10);
+            let msg;
+            if (refs > 0) {
+                msg =
+                    `⚠ This document has been linked to a comparison.\n\n` +
+                    `"${title}" is referenced by ${refs} past comparison run${refs === 1 ? "" : "s"}.\n\n` +
+                    `If you delete it, those references will be silently removed from the history. ` +
+                    `Old comparison pages will show one fewer matched document afterward.\n\n` +
+                    `This action cannot be undone. Delete anyway?`;
+            } else {
+                msg = `Permanently delete "${title}"?\n\nThis action cannot be undone.`;
+            }
+            if (!confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
