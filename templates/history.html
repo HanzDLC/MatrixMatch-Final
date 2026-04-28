@@ -1,16 +1,78 @@
 {% extends "base.html" %}
 {% block title %}Comparison History - MatrixMatch{% endblock %}
 
+{% block extra_head %}
+<style>
+.mgmt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.mgmt-toolbar .btn,
+.mgmt-toolbar button {
+    white-space: nowrap;
+    padding: 0.5rem 0.9rem;
+    height: 38px;
+    line-height: 1;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+}
+.mgmt-toolbar .form-input { height: 38px; line-height: 1; }
+.mgmt-toolbar select.form-input {
+    color: var(--text-primary, #f3f4f6);
+    background-color: var(--surface, #1f2937);
+    appearance: auto;
+    -webkit-appearance: menulist;
+    padding: 0 0.6rem;
+    text-overflow: ellipsis;
+}
+.mgmt-toolbar select.form-input option { color: #1f2937; background-color: #fff; }
+.mgmt-toolbar form { margin: 0; display: flex; gap: 0.5rem; align-items: center; }
+.search-hit {
+    background-color: #fde68a;
+    color: #92400e;
+    font-weight: 600;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
-    <div>
-        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">Comparison History</h1>
-        <p style="font-size: 1.1rem;">Browse and review past semantic analyses and matrices.</p>
-    </div>
-    
-    <div style="width: 300px;">
-        <input type="text" id="historySearch" class="form-input" placeholder="Search by ID or program..." style="background-color: var(--color-surface); padding: 0.75rem 1rem;">
-    </div>
+<div style="margin-bottom: 1.25rem;">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.25rem;">
+        Comparison History
+        <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
+                     font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
+                     border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
+            {{ total_rows }}
+        </span>
+    </h1>
+    <p style="font-size: 1rem; color: var(--text-muted); margin: 0;">Browse and review past semantic analyses and matrices.</p>
+</div>
+
+<div class="mgmt-toolbar">
+    <form method="get" action="{{ url_for('history') }}">
+        <input type="text" name="q" id="historySearch" value="{{ q or '' }}" class="form-input"
+               placeholder="Search ID, program, or keywords..." style="width: 260px;"
+               autocomplete="off">
+        <select name="sort" class="form-input" style="width: 130px;">
+            <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest</option>
+            <option value="oldest" {% if sort == 'oldest' %}selected{% endif %}>Oldest</option>
+        </select>
+        <select name="per_page" class="form-input" style="width: 100px;">
+            {% for n in [10, 25, 50, 100] %}
+                <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}/page</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if q %}
+          <a href="{{ url_for('history') }}" class="btn btn-outline">Clear</a>
+        {% endif %}
+    </form>
 </div>
 
 <div class="table-container">
@@ -48,7 +110,7 @@
             <tr>
                 <td colspan="5" class="text-center" style="padding: 3rem; color: var(--text-muted);">
                     <div style="font-size: 3rem; margin-bottom: 1rem;">🔍</div>
-                    <p>No history entries found in the core database.</p>
+                    <p>{% if q %}No history entries match your search.{% else %}No history entries found in the core database.{% endif %}</p>
                 </td>
             </tr>
         {% endif %}
@@ -56,24 +118,111 @@
     </table>
 </div>
 
+{% if total_pages > 1 %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+    <div style="color: var(--text-muted); font-size: 0.9rem;">
+        Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong>
+        — showing {{ history_rows|length }} of {{ total_rows }}
+    </div>
+    <div style="display: flex; gap: 0.4rem; align-items: center;">
+        {% set qs = 'q=' ~ (q|urlencode) ~ '&sort=' ~ (sort|urlencode) ~ '&per_page=' ~ per_page %}
+        {% if page > 1 %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page=1">« First</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page - 1 }}">‹ Prev</a>
+        {% endif %}
+        {% set start = [1, page - 2]|max %}
+        {% set end = [total_pages, page + 2]|min %}
+        {% for p in range(start, end + 1) %}
+            {% if p == page %}
+                <span class="btn btn-primary" style="padding: 0.4rem 0.75rem;">{{ p }}</span>
+            {% else %}
+                <a class="btn btn-outline" style="padding: 0.4rem 0.75rem;" href="?{{ qs }}&page={{ p }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page + 1 }}">Next ›</a>
+            <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ total_pages }}">Last »</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Embedded simpler search logic since historical structure changed slightly -->
 <script>
 document.addEventListener("DOMContentLoaded", () => {
     const searchInput = document.getElementById("historySearch");
     const table = document.getElementById("historyTable");
     if (!searchInput || !table) return;
 
-    searchInput.addEventListener("keyup", function() {
-        const filter = searchInput.value.toLowerCase();
-        const trs = table.getElementsByTagName("tbody")[0].getElementsByTagName("tr");
-        for (let i = 0; i < trs.length; i++) {
-            const rowText = trs[i].textContent.toLowerCase();
-            trs[i].style.display = rowText.includes(filter) ? "" : "none";
-        }
+    const tbody = table.getElementsByTagName("tbody")[0];
+    if (!tbody) return;
+
+    // Snapshot original cell HTML so re-highlighting on each keystroke is clean.
+    const cellSnapshots = [];
+    Array.from(tbody.rows).forEach(row => {
+        const cells = [];
+        Array.from(row.cells).forEach(cell => cells.push(cell.innerHTML));
+        cellSnapshots.push(cells);
     });
+
+    function escapeRegex(s) {
+        return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function highlightCell(cell, term) {
+        if (!term) return;
+        const regex = new RegExp(escapeRegex(term), "gi");
+        const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null);
+        const targets = [];
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.parentElement && node.parentElement.tagName === "MARK") continue;
+            if (regex.test(node.nodeValue)) targets.push(node);
+            regex.lastIndex = 0;
+        }
+        targets.forEach(textNode => {
+            const frag = document.createDocumentFragment();
+            const text = textNode.nodeValue;
+            let lastIdx = 0;
+            let m;
+            const r = new RegExp(escapeRegex(term), "gi");
+            while ((m = r.exec(text)) !== null) {
+                if (m.index > lastIdx) frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+                const mark = document.createElement("mark");
+                mark.className = "search-hit";
+                mark.textContent = m[0];
+                frag.appendChild(mark);
+                lastIdx = r.lastIndex;
+            }
+            if (lastIdx < text.length) frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+    }
+
+    function applyFilter() {
+        const term = searchInput.value.trim();
+        const lower = term.toLowerCase();
+        Array.from(tbody.rows).forEach((row, i) => {
+            // Restore original markup
+            Array.from(row.cells).forEach((cell, j) => {
+                if (cellSnapshots[i] && cellSnapshots[i][j] !== undefined) {
+                    cell.innerHTML = cellSnapshots[i][j];
+                }
+            });
+            const rowText = row.textContent.toLowerCase();
+            const matches = !term || rowText.includes(lower);
+            row.style.display = matches ? "" : "none";
+            if (term && matches) {
+                Array.from(row.cells).forEach(cell => highlightCell(cell, term));
+            }
+        });
+    }
+
+    searchInput.addEventListener("input", applyFilter);
+    // Apply highlight on initial load if a server-side query is present
+    if (searchInput.value.trim()) applyFilter();
 });
 </script>
 {% endblock %}

@@ -1352,12 +1352,66 @@ def history():
         return redirect(url_for("admin_dashboard"))
 
 
+    # Pagination + search params
+    q = (request.args.get("q") or "").strip()
+    sort = (request.args.get("sort") or "newest").strip().lower()
+    if sort not in ("newest", "oldest"):
+        sort = "newest"
+
+    try:
+        per_page = int(request.args.get("per_page", 10))
+    except (TypeError, ValueError):
+        per_page = 10
+    if per_page not in (10, 25, 50, 100):
+        per_page = 10
+
+    try:
+        page = int(request.args.get("page", 1))
+    except (TypeError, ValueError):
+        page = 1
+    if page < 1:
+        page = 1
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
     try:
+        where_clauses = ["researcher_id = %s"]
+        params = [user["id"]]
+
+        if q:
+            like = f"%{q}%"
+            # Allow search by ID (#123 or 123), program, or keywords
+            stripped = q.lstrip("#").strip()
+            if stripped.isdigit():
+                where_clauses.append(
+                    "(CAST(history_id AS TEXT) = %s "
+                    "OR academic_program_filter ILIKE %s "
+                    "OR keywords ILIKE %s)"
+                )
+                params.extend([stripped, like, like])
+            else:
+                where_clauses.append(
+                    "(academic_program_filter ILIKE %s OR keywords ILIKE %s)"
+                )
+                params.extend([like, like])
+
+        where_sql = " AND ".join(where_clauses)
+        order_sql = "ORDER BY created_at " + ("ASC" if sort == "oldest" else "DESC")
+
         cursor.execute(
-            """
+            f"SELECT COUNT(*) AS cnt FROM comparison_history WHERE {where_sql}",
+            tuple(params),
+        )
+        total_rows = cursor.fetchone()["cnt"]
+
+        total_pages = max(1, (total_rows + per_page - 1) // per_page)
+        if page > total_pages:
+            page = total_pages
+        offset = (page - 1) * per_page
+
+        cursor.execute(
+            f"""
             SELECT
                 history_id,
                 keywords,
@@ -1365,10 +1419,11 @@ def history():
                 similarity_threshold,
                 created_at
             FROM comparison_history
-            WHERE researcher_id = %s
-            ORDER BY created_at DESC
+            WHERE {where_sql}
+            {order_sql}
+            LIMIT %s OFFSET %s
             """,
-            (user["id"],)
+            tuple(params) + (per_page, offset),
         )
         history_rows = cursor.fetchall()
     finally:
@@ -1378,7 +1433,13 @@ def history():
     return render_template(
         "history.html",
         user=user,
-        history_rows=history_rows
+        history_rows=history_rows,
+        q=q,
+        sort=sort,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        total_rows=total_rows,
     )
 
 
