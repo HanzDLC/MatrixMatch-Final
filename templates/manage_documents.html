@@ -1,47 +1,147 @@
 {% extends "base.html" %}
 {% block title %}Manage Documents - MatrixMatch{% endblock %}
 
-{% block content %}
-<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
-    <div>
-        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
-            Manage Documents
-            <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
-                         font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
-                         border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
-                {{ total_documents }}
-            </span>
-        </h1>
-        <p style="font-size: 1.1rem;">
-            Edit or remove studies in the repository.
-        </p>
-    </div>
+{% block extra_head %}
+<style>
+.mgmt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.mgmt-toolbar .btn,
+.mgmt-toolbar button {
+    white-space: nowrap;
+    padding: 0.5rem 0.9rem;
+    height: 38px;
+    line-height: 1;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+}
+.mgmt-toolbar .form-input {
+    height: 38px;
+    line-height: 1;
+}
+.mgmt-toolbar select.form-input {
+    color: var(--text-primary, #f3f4f6);
+    background-color: var(--surface, #1f2937);
+    /* Use the browser's native dropdown arrow so we don't have to reserve
+       extra padding-right that eats into text width. */
+    appearance: auto;
+    -webkit-appearance: menulist;
+    padding: 0 0.6rem;
+    text-overflow: ellipsis;
+}
+.mgmt-toolbar select.form-input option {
+    color: #1f2937;
+    background-color: #fff;
+}
+/* Uniform-width vertical action buttons in the table's last column */
+#documentsTable td:last-child .btn,
+#documentsTable td:last-child form,
+#documentsTable td:last-child form > .btn {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    justify-content: center;
+}
+/* Action button color coding (palette-aligned: navy / gold / red) */
+#documentsTable .btn-action-edit {
+    background-color: var(--color-primary);
+    color: #fff;
+    border: 1px solid var(--color-primary);
+}
+#documentsTable .btn-action-edit:hover {
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+}
+#documentsTable .btn-action-file {
+    background-color: var(--color-secondary);
+    color: var(--color-primary);
+    border: 1px solid var(--color-secondary);
+    font-weight: 600;
+}
+#documentsTable .btn-action-file:hover {
+    background-color: var(--color-secondary-hover);
+    border-color: var(--color-secondary-hover);
+    color: #fff;
+}
+mark.search-hit {
+    background-color: #fde68a;
+    color: #92400e;
+    padding: 0 0.15rem;
+    border-radius: 3px;
+    font-weight: 600;
+}
+.mgmt-toolbar form {
+    margin: 0;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+</style>
+{% endblock %}
 
-    <div style="display: flex; gap: 1rem; align-items: center;">
-        <form method="get" action="{{ url_for('manage_documents') }}" style="margin: 0; display: flex; gap: 0.5rem; align-items: center;">
-            <input type="text" name="q" value="{{ q or '' }}" class="form-input"
-                   placeholder="Search title, authors, abstract..." style="width: 260px;">
-            <select name="field" class="form-input" style="width: 200px;">
-                <option value="">All fields</option>
-                {% for f in research_fields %}
-                  <option value="{{ f }}" {% if research_field_filter == f %}selected{% endif %}>{{ f }}</option>
-                {% endfor %}
-            </select>
-            <input type="hidden" name="per_page" value="{{ per_page }}">
-            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Search</button>
-            {% if q or research_field_filter %}
-              <a href="{{ url_for('manage_documents') }}" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Clear</a>
-            {% endif %}
-        </form>
-        <a href="{{ url_for('upload_document') }}" class="btn btn-outline">+ Upload New</a>
-        <form method="post" action="{{ url_for('admin_clean_staging') }}" style="margin: 0;"
-              onsubmit="return confirm('Delete staging files older than 24 hours?');">
-            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem; font-size: 0.85rem;">
-                Clean staging
-            </button>
-        </form>
-        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
-    </div>
+{% block content %}
+<div style="margin-bottom: 1.25rem;">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.25rem;">
+        Manage Documents
+        <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
+                     font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
+                     border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
+            {{ total_documents }}
+        </span>
+    </h1>
+    <p style="font-size: 1rem; color: var(--text-muted); margin: 0;">
+        Edit or remove studies in the repository.
+    </p>
+</div>
+
+<div class="mgmt-toolbar">
+    <form method="get" action="{{ url_for('manage_documents') }}" id="documentsFilterForm">
+        <input type="text" name="q" value="{{ q or '' }}" class="form-input"
+               placeholder="Search…" style="width: 220px;">
+
+        <select name="scope" class="form-input" style="width: 180px;" title="What to filter by">
+            <option value="all"      {% if scope == 'all' %}selected{% endif %}>All fields</option>
+            <option value="id"       {% if scope == 'id' %}selected{% endif %}>ID #</option>
+            <option value="authors"  {% if scope == 'authors' %}selected{% endif %}>Authors</option>
+            <option value="field"    {% if scope == 'field' %}selected{% endif %}>Research Field</option>
+            <option value="features" {% if scope == 'features' %}selected{% endif %}>Features</option>
+        </select>
+
+        {# Sub-filter shown only when scope == 'field' — narrows by exact category #}
+        {% if scope == 'field' %}
+          <select name="field_value" class="form-input" style="width: 240px;" title="Research field category">
+              <option value="">— any category —</option>
+              {% for f in research_fields %}
+                <option value="{{ f }}" {% if research_field_filter == f %}selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+          </select>
+        {% endif %}
+
+        <select name="sort" class="form-input" style="width: 150px;" title="Sort order">
+            <option value="desc" {% if sort == 'desc' %}selected{% endif %}>Newest</option>
+            <option value="asc"  {% if sort == 'asc' %}selected{% endif %}>Oldest</option>
+        </select>
+
+        <input type="hidden" name="per_page" value="{{ per_page }}">
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if q or scope != 'all' or sort != 'desc' or research_field_filter %}
+          <a href="{{ url_for('manage_documents') }}" class="btn btn-outline">Clear</a>
+        {% endif %}
+    </form>
+
+    <div style="flex: 1;"></div>
+
+    <a href="{{ url_for('upload_document') }}" class="btn btn-primary">+ Upload New</a>
+    <form method="post" action="{{ url_for('admin_clean_staging') }}"
+          onsubmit="return confirm('Delete staging files older than 24 hours?');">
+        <button type="submit" class="btn btn-outline">Clean staging</button>
+    </form>
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
 </div>
 
 <!-- Flash messages -->
@@ -90,16 +190,16 @@
                         </div>
                     </td>
                     <td>
-                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <div style="display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch; min-width: 70px;">
                             <a href="{{ url_for('admin_edit_document', document_id=d.document_id) }}"
-                               class="btn btn-outline js-edit-document-link"
+                               class="btn btn-action-edit js-edit-document-link"
                                data-title="{{ d.title }}"
                                data-references="{{ d.reference_count }}"
                                style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">Edit</a>
 
                             {% if d.source_file_path %}
                             <a href="{{ url_for('admin_download_source_file', document_id=d.document_id) }}"
-                               class="btn btn-outline"
+                               class="btn btn-action-file"
                                style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">File</a>
                             {% endif %}
 
@@ -121,13 +221,13 @@
         <div class="text-center" style="padding: 4rem;">
             <div style="font-size: 3rem; margin-bottom: 1rem;">📄</div>
             <p style="color: var(--text-muted); font-size: 1.1rem;">
-                {% if q or research_field_filter %}
+                {% if q or scope != 'all' %}
                   No documents match your search.
                 {% else %}
                   No documents in the repository yet.
                 {% endif %}
             </p>
-            {% if not q and not research_field_filter %}
+            {% if not q and scope == 'all' %}
               <a href="{{ url_for('upload_document') }}" class="btn btn-primary" style="margin-top: 1rem;">+ Upload First Document</a>
             {% endif %}
         </div>
@@ -141,7 +241,7 @@
         — showing {{ documents|length }} of {{ total_documents }}
     </div>
     <div style="display: flex; gap: 0.4rem; align-items: center;">
-        {% set qs = 'q=' ~ (q|urlencode) ~ '&field=' ~ (research_field_filter|urlencode) ~ '&per_page=' ~ per_page %}
+        {% set qs = 'q=' ~ (q|urlencode) ~ '&scope=' ~ (scope|urlencode) ~ '&field_value=' ~ (research_field_filter|urlencode) ~ '&sort=' ~ (sort|urlencode) ~ '&per_page=' ~ per_page %}
         {% if page > 1 %}
             <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page=1">« First</a>
             <a class="btn btn-outline" style="padding: 0.4rem 0.7rem;" href="?{{ qs }}&page={{ page - 1 }}">‹ Prev</a>
@@ -168,7 +268,127 @@
 {% block extra_scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-    // Client-side search across the table
+    // Auto-submit when scope or sort changes so the input swaps shape (text vs category select).
+    const filterForm = document.getElementById("documentsFilterForm");
+    if (filterForm) {
+        filterForm.querySelectorAll('select[name="scope"], select[name="sort"], select[name="field_value"]').forEach(el => {
+            el.addEventListener("change", () => filterForm.submit());
+        });
+    }
+
+    // Real-time search: as the user types, filter visible rows on the current
+    // page AND highlight matches. Pressing Enter / Search triggers the full
+    // server-side search across all pages.
+    const tbody = document.querySelector("#documentsTable tbody");
+    const qInput = filterForm ? filterForm.querySelector('input[name="q"]') : null;
+
+    if (tbody) {
+        // Snapshot each row's original text-only cells so we can rebuild them
+        // on every keystroke without losing markup.
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+
+        // For each row, remember the textContent of each "text-bearing" cell.
+        // We highlight only inside cells that contain plain runs (title / authors / abstract / features).
+        // We mutate text nodes only — never <a>, <button>, <form>, <input>, <select>, <span class="badge"> labels.
+        const SKIP_TAGS = new Set(["SCRIPT","STYLE","INPUT","TEXTAREA","SELECT","BUTTON","FORM","A"]);
+
+        // Save original text-node values on first visit
+        function snapshotRow(row) {
+            if (row.__snapshot) return;
+            const snap = [];
+            const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+                acceptNode: (node) => {
+                    let p = node.parentNode;
+                    while (p && p !== row) {
+                        if (SKIP_TAGS.has(p.nodeName)) return NodeFilter.FILTER_REJECT;
+                        p = p.parentNode;
+                    }
+                    return node.nodeValue && node.nodeValue.trim()
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_REJECT;
+                }
+            });
+            let n;
+            while ((n = walker.nextNode())) snap.push({ node: n, text: n.nodeValue });
+            row.__snapshot = snap;
+        }
+        rows.forEach(snapshotRow);
+
+        function clearMarks(row) {
+            row.querySelectorAll("mark.search-hit").forEach(m => {
+                const t = document.createTextNode(m.textContent);
+                m.parentNode.replaceChild(t, m);
+            });
+            // Merge adjacent text nodes
+            row.normalize();
+        }
+
+        function applyHighlight(query) {
+            const trimmed = (query || "").trim();
+            // Reset to original text first
+            rows.forEach(row => {
+                clearMarks(row);
+            });
+            if (!trimmed) {
+                rows.forEach(row => row.style.display = "");
+                return;
+            }
+            const re = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+            rows.forEach(row => {
+                // Determine if any visible text in the row contains the query
+                const txt = row.textContent.toLowerCase();
+                if (!txt.includes(trimmed.toLowerCase())) {
+                    row.style.display = "none";
+                    return;
+                }
+                row.style.display = "";
+
+                // Walk fresh text nodes (post-clearMarks) and wrap matches in <mark>
+                const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+                    acceptNode: (node) => {
+                        let p = node.parentNode;
+                        while (p && p !== row) {
+                            if (SKIP_TAGS.has(p.nodeName)) return NodeFilter.FILTER_REJECT;
+                            p = p.parentNode;
+                        }
+                        return node.nodeValue ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+                    }
+                });
+                const targets = [];
+                let n;
+                while ((n = walker.nextNode())) targets.push(n);
+                for (const node of targets) {
+                    const text = node.nodeValue;
+                    re.lastIndex = 0;
+                    if (!re.test(text)) continue;
+                    re.lastIndex = 0;
+                    const frag = document.createDocumentFragment();
+                    let last = 0;
+                    text.replace(re, (m, idx) => {
+                        if (idx > last) frag.appendChild(document.createTextNode(text.slice(last, idx)));
+                        const mark = document.createElement("mark");
+                        mark.className = "search-hit";
+                        mark.textContent = m;
+                        frag.appendChild(mark);
+                        last = idx + m.length;
+                        return m;
+                    });
+                    if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+                    node.parentNode.replaceChild(frag, node);
+                }
+            });
+        }
+
+        // Initial: apply highlight from server-passed q
+        applyHighlight({{ (q or '')|tojson }});
+
+        // Real-time on keystroke
+        if (qInput) {
+            qInput.addEventListener("input", () => applyHighlight(qInput.value));
+        }
+    }
+
+    // Client-side search across the table (legacy, no-op when input is gone)
     const searchInput = document.getElementById("documentSearch");
     const table = document.getElementById("documentsTable");
     if (searchInput && table) {

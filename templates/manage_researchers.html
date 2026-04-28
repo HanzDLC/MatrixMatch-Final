@@ -33,40 +33,69 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.mgmt-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.mgmt-toolbar .btn,
+.mgmt-toolbar button {
+    white-space: nowrap;
+    padding: 0.5rem 0.9rem;
+    height: 38px;
+    line-height: 1;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+}
+.mgmt-toolbar .form-input { height: 38px; line-height: 1; }
+.mgmt-toolbar select.form-input {
+    color: var(--text-primary, #f3f4f6);
+    background-color: var(--surface, #1f2937);
+    appearance: auto;
+    -webkit-appearance: menulist;
+    padding: 0 0.6rem;
+    text-overflow: ellipsis;
+}
+.mgmt-toolbar select.form-input option { color: #1f2937; background-color: #fff; }
+.mgmt-toolbar form { margin: 0; display: flex; gap: 0.5rem; align-items: center; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem;">
-    <div>
-        <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.5rem;">
-            Manage Users
-            <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
-                         font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
-                         border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
-                {{ total_users }}
-            </span>
-        </h1>
-        <p style="font-size: 1.1rem;">Activate/deactivate accounts, change roles, and review comparison history.</p>
-    </div>
+<div style="margin-bottom: 1.25rem;">
+    <h1 style="color: var(--color-primary); font-size: 2rem; margin-bottom: 0.25rem;">
+        Manage Users
+        <span style="display: inline-block; background-color: var(--color-primary); color: #fff;
+                     font-size: 0.95rem; font-weight: 700; padding: 0.2rem 0.7rem;
+                     border-radius: 999px; margin-left: 0.5rem; vertical-align: middle;">
+            {{ total_users }}
+        </span>
+    </h1>
+    <p style="font-size: 1rem; color: var(--text-muted); margin: 0;">Activate/deactivate accounts, change roles, and review comparison history.</p>
+</div>
 
-    <div style="display: flex; gap: 1rem; align-items: center;">
-        <form method="get" action="{{ url_for('manage_researchers') }}" style="margin: 0; display: flex; gap: 0.5rem; align-items: center;">
-            <input type="text" name="q" value="{{ q or '' }}" class="form-input"
-                   placeholder="Search name or email..." style="width: 220px;">
-            <select name="role" class="form-input" style="width: 140px;">
-                <option value="">All roles</option>
-                <option value="Admin" {% if role_filter == 'Admin' %}selected{% endif %}>Admin</option>
-                <option value="Researcher" {% if role_filter == 'Researcher' %}selected{% endif %}>Researcher</option>
-            </select>
-            <input type="hidden" name="per_page" value="{{ per_page }}">
-            <button type="submit" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Search</button>
-            {% if q or role_filter %}
-              <a href="{{ url_for('manage_researchers') }}" class="btn btn-outline" style="padding: 0.5rem 0.85rem;">Clear</a>
-            {% endif %}
-        </form>
-        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
-    </div>
+<div class="mgmt-toolbar">
+    <form method="get" action="{{ url_for('manage_researchers') }}">
+        <input type="text" name="q" value="{{ q or '' }}" class="form-input"
+               placeholder="Search name or email..." style="width: 220px;">
+        <select name="role" class="form-input" style="width: 140px;">
+            <option value="">All roles</option>
+            <option value="Admin" {% if role_filter == 'Admin' %}selected{% endif %}>Admin</option>
+            <option value="Researcher" {% if role_filter == 'Researcher' %}selected{% endif %}>Researcher</option>
+        </select>
+        <input type="hidden" name="per_page" value="{{ per_page }}">
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if q or role_filter %}
+          <a href="{{ url_for('manage_researchers') }}" class="btn btn-outline">Clear</a>
+        {% endif %}
+    </form>
+
+    <div style="flex: 1;"></div>
+
+    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline">Back to Dashboard</a>
 </div>
 
 <!-- Flash messages -->

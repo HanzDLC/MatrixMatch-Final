@@ -1693,14 +1693,73 @@ def manage_documents():
     except (TypeError, ValueError):
         per_page = 25
     q = (request.args.get("q") or "").strip()
-    research_field_filter = (request.args.get("field") or "").strip()
+    # Search scope: 'all' (default), 'id', 'authors', 'field', 'features'
+    scope = (request.args.get("scope") or "all").strip().lower()
+    if scope not in ("all", "id", "authors", "field", "features"):
+        scope = "all"
+    sort = (request.args.get("sort") or "desc").strip().lower()
+    if sort not in ("asc", "desc"):
+        sort = "desc"
+    research_field_filter = (request.args.get("field_value") or "").strip()
 
     where_clauses = []
     params: list = []
     if q:
         like = f"%{q}%"
-        where_clauses.append("(title ILIKE %s OR authors ILIKE %s OR abstract ILIKE %s)")
-        params.extend([like, like, like])
+        q_id = q.lstrip("#").strip()
+        scope_clauses: list[str] = []
+        if scope == "id":
+            if q_id.isdigit():
+                scope_clauses.append("document_id = %s")
+                params.append(int(q_id))
+            else:
+                # Numeric scope but non-numeric input → match nothing
+                scope_clauses.append("FALSE")
+        elif scope == "authors":
+            scope_clauses.append("authors ILIKE %s")
+            params.append(like)
+        elif scope == "field":
+            # When scope is 'field', the category sub-dropdown handles the field
+            # narrowing. The free-text q should still do a broad text search
+            # across title/authors/abstract/features so users can combine the
+            # two (e.g. "benchmarking" within "Sciences").
+            scope_clauses.extend([
+                "title ILIKE %s",
+                "authors ILIKE %s",
+                "abstract ILIKE %s",
+                "research_field ILIKE %s",
+                "COALESCE(research_field_other, '') ILIKE %s",
+                ("EXISTS (SELECT 1 FROM document_key_features kf "
+                 "WHERE kf.document_id = documents.document_id "
+                 "AND (kf.label ILIKE %s OR kf.description ILIKE %s))"),
+            ])
+            params.extend([like, like, like, like, like, like, like])
+            if q_id.isdigit():
+                scope_clauses.append("document_id = %s")
+                params.append(int(q_id))
+        elif scope == "features":
+            scope_clauses.append(
+                "EXISTS (SELECT 1 FROM document_key_features kf "
+                "WHERE kf.document_id = documents.document_id "
+                "AND (kf.label ILIKE %s OR kf.description ILIKE %s))"
+            )
+            params.extend([like, like])
+        else:  # all
+            scope_clauses.extend([
+                "title ILIKE %s",
+                "authors ILIKE %s",
+                "abstract ILIKE %s",
+                "research_field ILIKE %s",
+                "COALESCE(research_field_other, '') ILIKE %s",
+                ("EXISTS (SELECT 1 FROM document_key_features kf "
+                 "WHERE kf.document_id = documents.document_id "
+                 "AND (kf.label ILIKE %s OR kf.description ILIKE %s))"),
+            ])
+            params.extend([like, like, like, like, like, like, like])
+            if q_id.isdigit():
+                scope_clauses.append("document_id = %s")
+                params.append(int(q_id))
+        where_clauses.append("(" + " OR ".join(scope_clauses) + ")")
     if research_field_filter and research_field_filter in RESEARCH_FIELDS:
         where_clauses.append("research_field = %s")
         params.append(research_field_filter)
@@ -1712,13 +1771,14 @@ def manage_documents():
         cursor.execute(f"SELECT COUNT(*) AS c FROM documents{where_sql}", params)
         total_documents = cursor.fetchone()["c"]
         offset = (page - 1) * per_page
+        order_dir = "ASC" if sort == "asc" else "DESC"
         cursor.execute(
             f"""
             SELECT document_id, title, abstract, research_field, research_field_other,
                    authors, source_file_path
             FROM documents
             {where_sql}
-            ORDER BY document_id DESC
+            ORDER BY document_id {order_dir}
             LIMIT %s OFFSET %s
             """,
             params + [per_page, offset],
@@ -1777,6 +1837,8 @@ def manage_documents():
         per_page=per_page,
         total_pages=total_pages,
         q=q,
+        scope=scope,
+        sort=sort,
         research_field_filter=research_field_filter,
         research_fields=RESEARCH_FIELDS,
     )
